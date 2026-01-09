@@ -410,7 +410,7 @@ try:
         contextLoaded = pyqtSignal(dict)
         contextFailed = pyqtSignal(str)
         
-        def __init__(self, base_url: str = "http://localhost:8000", parent=None):
+        def __init__(self, base_url: str = "http://localhost:8001", parent=None):
             super().__init__(parent)
             self.api_client = ExecutorAPIClient(base_url)
             self.worker = AsyncWorker()

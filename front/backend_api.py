@@ -171,6 +171,25 @@ async def lifespan(app: FastAPI):
     # 这里可以加载默认工具和 LLM 工厂
     # 实际使用时需要根据项目配置来设置
     
+    # Setup test tools when running with uvicorn
+    setup_test_tools()
+    
+    # Also try to load get_daily_stats from test directory
+    try:
+        # Add test directory to path if not already there
+        test_dir = os.path.join(parent_dir, "test")
+        if test_dir not in sys.path:
+            sys.path.insert(0, test_dir)
+        
+        from test_fuction.get_daily_stats import get_daily_stats
+        executor_manager.register_tool("get_daily_stats", get_daily_stats)
+        print("✅ Registered tool: get_daily_stats")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not load get_daily_stats tool: {e}")
+    
+    # Setup LLM factory (using environment variable or defaults)
+    setup_llm_factory()
+    
     yield
     
     # 关闭时的清理
@@ -214,11 +233,49 @@ async def list_tools():
     """列出所有已注册的工具"""
     tools = []
     for name, tool in executor_manager._tools_registry.items():
-        tools.append({
+        tool_data = {
             "name": name,
             "description": getattr(tool, 'description', 'No description'),
-        })
+        }
+        
+        # Try to extract parameter information from langchain tool
+        try:
+            # Check if it's a langchain tool with args_schema
+            if hasattr(tool, 'args_schema'):
+                schema = tool.args_schema
+                if schema:
+                    # Get field information from pydantic model
+                    tool_data["parameters"] = {}
+                    if hasattr(schema, 'model_fields'):
+                        for field_name, field_info in schema.model_fields.items():
+                            tool_data["parameters"][field_name] = {
+                                "type": str(field_info.annotation),
+                                "required": field_info.is_required(),
+                                "description": field_info.description or ""
+                            }
+            
+            # Also try to get from function signature
+            if hasattr(tool, 'func'):
+                import inspect
+                sig = inspect.signature(tool.func)
+                if "parameters" not in tool_data:
+                    tool_data["parameters"] = {}
+                
+                for param_name, param in sig.parameters.items():
+                    if param_name not in tool_data["parameters"]:
+                        tool_data["parameters"][param_name] = {
+                            "type": str(param.annotation) if param.annotation != inspect.Parameter.empty else "Any",
+                            "required": param.default == inspect.Parameter.empty,
+                            "description": ""
+                        }
+        except Exception as e:
+            # If extraction fails, just skip parameters
+            print(f"Warning: Could not extract parameters for tool {name}: {e}")
+        
+        tools.append(tool_data)
+    
     return {"tools": tools}
+
 
 
 @app.post("/api/executor/init", response_model=InitExecutorResponse)

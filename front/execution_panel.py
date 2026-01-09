@@ -66,35 +66,7 @@ class ExecutionControlPanel(QWidget):
         
         main_layout.addWidget(message_group)
         
-        # === 模型配置区域 ===
-        config_group = QGroupBox("Model Configuration")
-        config_group.setCheckable(True)
-        config_group.setChecked(False)  # 默认折叠
-        config_layout = QFormLayout(config_group)
-        
-        # Temperature
-        self.temperature_spin = QDoubleSpinBox()
-        self.temperature_spin.setRange(0.0, 2.0)
-        self.temperature_spin.setValue(0.7)
-        self.temperature_spin.setSingleStep(0.1)
-        config_layout.addRow("Temperature:", self.temperature_spin)
-        
-        # Top-P
-        self.top_p_spin = QDoubleSpinBox()
-        self.top_p_spin.setRange(0.0, 1.0)
-        self.top_p_spin.setValue(0.9)
-        self.top_p_spin.setSingleStep(0.05)
-        config_layout.addRow("Top-P:", self.top_p_spin)
-        
-        # Enable Search
-        self.enable_search_check = QCheckBox()
-        config_layout.addRow("Enable Search:", self.enable_search_check)
-        
-        # Enable Thinking
-        self.enable_thinking_check = QCheckBox()
-        config_layout.addRow("Enable Thinking:", self.enable_thinking_check)
-        
-        main_layout.addWidget(config_group)
+        main_layout.addWidget(message_group)
         
         # === 控制按钮区域 ===
         control_group = QGroupBox("Execution Control")
