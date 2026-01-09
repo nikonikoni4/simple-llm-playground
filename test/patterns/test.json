@@ -1,0 +1,31 @@
+{
+    "test1": {
+        "task": "test1",
+        "nodes": [
+            {
+                "id": 1,
+                "node_type": "tool-first",
+                "node_name": "获取统计数据",
+                "task_prompt": "总结这个统计数据",
+                "thread_id": "main",
+                "parent_thread_id": null,
+                "initial_tool_name": "get_daily_stats",
+                "initial_tool_args": {},
+                "data_out": false,
+                "data_out_description": "用户行为统计数据: "
+            },
+            {
+                "id": 2,
+                "node_type": "llm-first",
+                "node_name": "总结统计数据",
+                "task_prompt": "用一句话总结",
+                "thread_id": "main",
+                "parent_thread_id": null,
+                "initial_tool_name": null,
+                "initial_tool_args": {},
+                "data_out": false,
+                "data_out_description": "用户行为统计数据: "
+            }
+        ]
+    }
+}
