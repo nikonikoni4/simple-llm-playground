@@ -515,7 +515,7 @@ def setup_llm_factory(
     支持阿里云 DashScope API (通义千问) 和 OpenAI API
     
     Args:
-        api_key: API密钥 (DashScope API Key 或 OpenAI API Key)
+        api_key: API密钥 (DashScope API Key 或 OpenAI API Key)。如果不传，尝试从环境读取。
         model: 模型名称，默认 "qwen-plus"
             - 通义千问: "qwen-plus", "qwen-max", "qwen-turbo" 等
             - OpenAI: "gpt-4", "gpt-3.5-turbo" 等
@@ -524,6 +524,13 @@ def setup_llm_factory(
             - OpenAI: "https://api.openai.com/v1" (默认)
         **kwargs: 其他参数如 temperature, top_p 等
     """
+    # 尝试从环境变量读取 API Key
+    if not api_key:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("OPENAI_API_KEY")
+    
+    if not api_key:
+        print("⚠️ Warning: No API key found. Please set DASHSCOPE_API_KEY or OPENAI_API_KEY environment variable.")
+
     def factory():
         try:
             from langchain_openai import ChatOpenAI
@@ -549,10 +556,13 @@ def setup_llm_factory(
 if __name__ == "__main__":
     import uvicorn
     
-    # 设置测试工具
+    # 1. 设置 LLM 工厂 (优先)
+    setup_llm_factory()
+    
+    # 2. 设置测试工具
     setup_test_tools()
     
     print("🚀 Starting Simple LLM Playground API...")
-    print("📍 API docs available at: http://localhost:8000/docs")
+    print("📍 API docs available at: http://localhost:8001/docs")
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

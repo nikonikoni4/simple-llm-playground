@@ -289,6 +289,19 @@ class ExecutionControlPanel(QWidget):
         output_tokens = tokens_usage.get("output_tokens", 0)
         total = input_tokens + output_tokens
         self.tokens_label.setText(f"Input: {input_tokens} | Output: {output_tokens} | Total: {total}")
+
+    def _check_session_error(self, error: str) -> bool:
+        """检查是否为会话失效错误 (404)"""
+        # API Error 404: Executor not found
+        if "404" in str(error) and "not found" in str(error).lower():
+            # 会话失效，重置状态
+            self.controller.reset_session()
+            self._reset_ui()
+            # 提示用户
+            self.status_label.setText("Session Expired")
+            self.status_label.setStyleSheet("color: #F44336; font-weight: bold;")
+            return True
+        return False
     
     # === 信号处理 ===
     
@@ -342,6 +355,11 @@ class ExecutionControlPanel(QWidget):
     
     def _on_step_failed(self, error: str):
         """单步执行失败"""
+        # 检查是否为会话失效
+        if self._check_session_error(error):
+             self.executionError.emit("Session expired (Backend restarted). Please re-initialize.")
+             return
+
         self.step_btn.setEnabled(True)
         self.run_btn.setEnabled(True)
         self.status_label.setText("Step failed")
@@ -373,6 +391,12 @@ class ExecutionControlPanel(QWidget):
     def _on_run_failed(self, error: str):
         """全量执行失败"""
         self.is_executing = False
+        
+        # 检查是否为会话失效
+        if self._check_session_error(error):
+             self.executionError.emit("Session expired (Backend restarted). Please re-initialize.")
+             return
+
         self.step_btn.setEnabled(True)
         self.run_btn.setEnabled(True)
         self.stop_btn.setEnabled(True)

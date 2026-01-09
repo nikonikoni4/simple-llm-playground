@@ -67,7 +67,7 @@ class ExecutorAPIClient:
     用于与后端 FastAPI 服务通信，支持同步和异步调用
     """
     
-    def __init__(self, base_url: str = "http://localhost:8000"):
+    def __init__(self, base_url: str = "http://localhost:8001"):
         self.base_url = base_url.rstrip("/")
         self._session: Optional[aiohttp.ClientSession] = None
     
@@ -428,6 +428,10 @@ try:
             self.worker.stop()
             self.worker.wait()
             asyncio.run(self.api_client.close())
+
+        def reset_session(self):
+            """重置会话 (用于处理 404 等由于后端重启导致的 ID 失效)"""
+            self.current_executor_id = None
         
         def _on_task_completed(self, task_id: str, result):
             """处理任务完成"""
