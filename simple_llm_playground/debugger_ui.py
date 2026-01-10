@@ -3,7 +3,7 @@ import os
 import json
 import random
 
-# Ensure we can find the sibling package 'data_driving_agent_v2'
+# Ensure we can find the sibling package 'llm_linear_executor'
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
@@ -23,16 +23,24 @@ from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import QPen, QBrush, QColor, QWheelEvent, QPainter, QPainterPath, QFont
 
 # Import execution control panel
-from execution_panel import ExecutionControlPanel
+from .execution_panel import ExecutionControlPanel
+
+try:
+    from config import BACKEND_PORT
+except ImportError:
+    # Try relative import if running as package
+    try:
+        from ..config import BACKEND_PORT
+    except ImportError:
+        BACKEND_PORT = 8001
 
 # Import schemas to ensure we match the data structure
-# Adjust import path if needed based on execution context
 try:
-    from data_driving_agent_v2.data_driving_schemas import ALL_NODE_TYPES
+    from .data_driving_schemas import ALL_NODE_TYPES
 except ImportError:
     # Fallback/Mock if direct import fails (e.g. running script directly from subfolder)
     # Using list for stable ordering in UI
-    ALL_NODE_TYPES = ["llm-first", "tool-first", "planning"]
+    ALL_NODE_TYPES = ["llm-first", "tool-first"]  # plan 未实现
 
 # --- Dark Theme Stylesheet ---
 DARK_STYLESHEET = """
@@ -1478,7 +1486,7 @@ class NodePropertyEditor(QGroupBox):
         # --- Data Flow Output ---
         self.data_out_cb = QCheckBox("Output Data to Parent")
         self.data_out_thread_edit = QLineEdit()
-        self.data_out_thread_edit.setPlaceholderText("Target Thread ID (defaults to parent_thread_id)")
+        self.data_out_thread_edit.setPlaceholderText("Target Thread ID (defaults to main)")
         self.desc_edit = QLineEdit()
         self.desc_edit.setPlaceholderText("Description of output data")
         
@@ -1666,7 +1674,7 @@ class NodePropertyEditor(QGroupBox):
         """Load available tools from backend API"""
         try:
             import requests
-            response = requests.get("http://localhost:8001/api/tools", timeout=2)
+            response = requests.get(f"http://localhost:{BACKEND_PORT}/api/tools", timeout=2)
             if response.status_code == 200:
                 data = response.json()
                 tools = data.get("tools", [])

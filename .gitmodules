@@ -1,0 +1,4 @@
+[submodule "llm_linear_executor"]
+	path = llm_linear_executor
+	url = https://github.com/nikonikoni4/llm_linear_executor.git
+	branch = main

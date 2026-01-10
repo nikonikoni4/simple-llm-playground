@@ -6,7 +6,13 @@ import aiohttp
 from typing import Optional, Any
 from dataclasses import dataclass
 from enum import Enum
-
+try:
+    from config import BACKEND_PORT
+except ImportError:
+    try:
+        from ..config import BACKEND_PORT
+    except ImportError:
+        BACKEND_PORT = 8001
 
 class ExecutorStatus(str, Enum):
     """执行器状态"""
@@ -67,7 +73,7 @@ class ExecutorAPIClient:
     用于与后端 FastAPI 服务通信，支持同步和异步调用
     """
     
-    def __init__(self, base_url: str = "http://localhost:8001"):
+    def __init__(self, base_url: str = f"http://localhost:{BACKEND_PORT}"):
         self.base_url = base_url.rstrip("/")
         self._session: Optional[aiohttp.ClientSession] = None
     
@@ -410,7 +416,7 @@ try:
         contextLoaded = pyqtSignal(dict)
         contextFailed = pyqtSignal(str)
         
-        def __init__(self, base_url: str = "http://localhost:8001", parent=None):
+        def __init__(self, base_url: str = f"http://localhost:{BACKEND_PORT}", parent=None):
             super().__init__(parent)
             self.api_client = ExecutorAPIClient(base_url)
             self.worker = AsyncWorker()

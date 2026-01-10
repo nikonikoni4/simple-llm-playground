@@ -12,13 +12,13 @@ from langchain_core.output_parsers import PydanticOutputParser
 # 3. planning: 规划节点，生成子计划并递归执行
 # ============================================================================
 
-NodeType = Literal["llm-first", "tool-first", "planning"]
+NodeType = Literal["llm-first", "tool-first"] # , "planning"
 
 # 所有可用的节点类型
-ALL_NODE_TYPES: set[NodeType] = {"llm-first", "tool-first", "planning"}
+ALL_NODE_TYPES: set[NodeType] = {"llm-first", "tool-first"} # , "planning"
 
 # 预定义的权限集合
-MAIN_EXECUTOR_PERMISSIONS: set[NodeType] = {"llm-first", "tool-first", "planning"}
+MAIN_EXECUTOR_PERMISSIONS: set[NodeType] = {"llm-first", "tool-first"} # , "planning"
 SUB_EXECUTOR_PERMISSIONS: set[NodeType] = {"llm-first", "tool-first"}
 
 
@@ -63,7 +63,7 @@ class NodeDefinition(BaseModel):
     
     # ===== 核心标识 =====
     node_type: NodeType = Field(
-        description="节点类型: llm-first(LLM先执行), tool-first(工具先执行), planning(规划节点)"
+        description="节点类型: llm-first(LLM先执行), tool-first(工具先执行)" # , planning(规划节点)
     )
     node_name: str = Field(description="节点名称，用于日志和调试")
     

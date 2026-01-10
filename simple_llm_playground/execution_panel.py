@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QFont
 
-from api_client import ExecutorController, APIError
+from .api_client import ExecutorController, APIError
 
 
 class ExecutionControlPanel(QWidget):

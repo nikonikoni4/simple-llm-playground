@@ -20,10 +20,10 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-from data_driving_agent_v2.async_executor import (
+from .async_executor import (
     AsyncExecutor, NodeStatus, NodeExecutionState, NodeContext
 )
-from data_driving_agent_v2.data_driving_schemas import ExecutionPlan, NodeDefinition
+from .data_driving_schemas import ExecutionPlan, NodeDefinition
 
 
 # =============================================================================
@@ -166,20 +166,20 @@ async def lifespan(app: FastAPI):
     # 实际使用时需要根据项目配置来设置
     
     # Setup test tools when running with uvicorn
-    setup_test_tools()
     
+    # setup_test_tools()
     # Also try to load get_daily_stats from test directory
-    try:
-        # Add test directory to path if not already there
-        test_dir = os.path.join(parent_dir, "test")
-        if test_dir not in sys.path:
-            sys.path.insert(0, test_dir)
+    # try:
+    #     # Add test directory to path if not already there
+    #     test_dir = os.path.join(parent_dir, "test")
+    #     if test_dir not in sys.path:
+    #         sys.path.insert(0, test_dir)
         
-        from test_fuction.get_daily_stats import get_daily_stats
-        executor_manager.register_tool("get_daily_stats", get_daily_stats)
-        print("✅ Registered tool: get_daily_stats")
-    except Exception as e:
-        print(f"⚠️ Warning: Could not load get_daily_stats tool: {e}")
+    #     from test_fuction.get_daily_stats import get_daily_stats
+    #     executor_manager.register_tool("get_daily_stats", get_daily_stats)
+    #     print("✅ Registered tool: get_daily_stats")
+    # except Exception as e:
+    #     print(f"⚠️ Warning: Could not load get_daily_stats tool: {e}")
     
     # Setup LLM factory (using environment variable or defaults)
     setup_llm_factory()
@@ -636,7 +636,16 @@ if __name__ == "__main__":
     # 测试 LLM  链接
     # llm = executor_manager._llm_factory()
     # print(llm.invoke("Hello, how are you?"))
+    # Try to import global config from main.py
+    try:
+        import config
+        port = getattr(config, "BACKEND_PORT", 8001)
+        print(f"⚙️  Loaded configuration from main.py: Port {port}")
+    except ImportError:
+        port = 8001
+        print("⚠️  Warning: Could not import BACKEND_PORT from main.py, using default 8001")
+
     print("🚀 Starting Simple LLM Playground API...")
-    print("📍 API docs available at: http://localhost:8001/docs")
-    
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    print(f"📍 API docs available at: http://localhost:{port}/docs")
+
+    uvicorn.run(app, host="0.0.0.0", port=port)
