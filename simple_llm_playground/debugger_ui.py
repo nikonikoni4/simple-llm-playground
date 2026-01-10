@@ -2188,7 +2188,31 @@ class MainWindow(QMainWindow):
                 if "custom" in data and "nodes" in data["custom"]:
                     self.current_plan_data = data
                     nodes = data["custom"]["nodes"]
-                    
+
+                    # Auto-prepend main node if missing (for data flow clarity)
+                    needs_main_node = True
+                    if nodes and nodes[0].get("thread_id") == "main" and nodes[0].get("node_name") == "main":
+                        needs_main_node = False
+
+                    if needs_main_node:
+                        # Create empty main node as data entry point
+                        main_node = {
+                            "node_name": "main",
+                            "node_type": "llm-first",
+                            "thread_id": "main",
+                            "task_prompt": "",  # Empty = no operation, just data relay
+                            "fixed": True,
+                            "thread_view_index": 0,
+                        }
+                        nodes.insert(0, main_node)
+
+                        # Shift existing layout positions to make room for main node
+                        new_layout_data = {}
+                        new_layout_data["main"] = [0.0, 200.0]  # Default main position
+                        for name, pos in layout_data.items():
+                            new_layout_data[name] = [pos[0] + 220.0, pos[1]]
+                        layout_data = new_layout_data
+
                     # 3. Inject Layout Data Back into Nodes
                     for node in nodes:
                         name = node.get("node_name")

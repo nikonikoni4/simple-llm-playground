@@ -521,15 +521,25 @@ class AsyncExecutor:
     async def _execute_llm_first_node(self, node: NodeDefinition) -> str:
         """
         LLM-First 节点执行器
-        
+
         流程：LLM思考 -> [可选]调用工具 -> [可选]循环
-        
+
         配置选项：
         - tools: 可用工具列表
         - enable_tool_loop: 是否启用工具调用循环
+        - task_prompt: 为空时跳过 LLM 执行，仅作为数据中转节点
         """
         logger.info(f"执行节点 [llm-first]: {node.node_name}")
-        
+
+        # 如果 task_prompt 为空，跳过 LLM 执行（数据中转节点）
+        if not node.task_prompt or node.task_prompt.strip() == "":
+            logger.info(f"    - task_prompt 为空，跳过 LLM 执行（数据中转节点）")
+            # 处理 data_out��空内容）
+            if node.data_out:
+                self._set_data_out(node.thread_id, node.node_type,
+                                  node.data_out_description, "")
+            return ""
+
         # 验证工具
         if node.tools:
             self._validate_tools(node.tools)
