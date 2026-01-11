@@ -425,7 +425,14 @@ class NodeItem(QGraphicsItem):
         self.subtext_color = QColor("#b0b0b0")
 
     def boundingRect(self):
-        return QRectF(-2, -2, self.width + 4, self.height + 4)
+        # Expand bounds to include the up button which is above the node
+        # Up button is at y = -24 (button size 20 + gap 4), so we need to extend upwards
+        thread_view_index = self.node_data.get("thread_view_index", 0)
+        if thread_view_index > 0:
+            # Include up button area: extends 28 pixels above node (20 button + 4 gap + 4 margin)
+            return QRectF(-2, -28, self.width + 4, self.height + 32)
+        else:
+            return QRectF(-2, -2, self.width + 4, self.height + 4)
 
     def get_output_anchor_center(self) -> QPointF:
         """Get the center of output anchor in scene coordinates"""
@@ -553,92 +560,74 @@ class NodeItem(QGraphicsItem):
         # Thread ID text (after buttons)
         thread_x_offset = right_button_x + button_size + 4
         # Calculate thread button area first to avoid overlap
-        thread_button_size = 14
-        thread_button_x = self.width - 50  # Position before output anchor, leave more space
+        thread_button_size = 20  # Increased from 14 for better visibility
+        thread_button_x = self.width - 56  # Adjusted position for larger buttons
         # Limit thread ID text to not overlap with buttons
         thread_text_width = thread_button_x - thread_x_offset - 4  # Leave 4px gap before buttons
         painter.setPen(self.subtext_color)
         painter.drawText(QRectF(thread_x_offset, button_y, max(thread_text_width, 50), button_size),
                          Qt.AlignLeft | Qt.AlignVCenter, f"| {thread_id}")
         
-        # Draw thread swap buttons (up and down arrows on the right side, before output anchor)
-        # Position buttons to avoid overlap with output anchor (which is at width-12, height/2)
-        thread_button_y_start = button_y
-        
-        # #region agent log
-        import json
-        try:
-            with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"debugger_ui.py:563","message":"Button position calculation","data":{"thread_button_x":thread_button_x,"thread_button_y_start":thread_button_y_start,"button_y":button_y,"thread_x_offset":thread_x_offset,"width":self.width,"thread_id":thread_id},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-        except: pass
-        # #endregion
+        # Draw thread swap buttons
+        # Up button: Position ABOVE the node (negative Y)
+        # Down button: Position inside the node at the top
         
         # Up button (only show if thread_view_index > 0, meaning not the topmost thread)
         thread_view_index = self.node_data.get("thread_view_index", 0)
         if thread_view_index > 0:
-            self.up_thread_rect = QRectF(thread_button_x, thread_button_y_start, thread_button_size, thread_button_size)
-            # Draw button background
+            # Position up button ABOVE the node (outside the node bounds)
+            up_button_y = -thread_button_size - 4  # 4px gap above the node
+            up_button_x = self.width / 2 - thread_button_size / 2  # Center horizontally
+            self.up_thread_rect = QRectF(up_button_x, up_button_y, thread_button_size, thread_button_size)
+            # Draw button background with more visible colors
             if self.hover_swap_button == 'up':
-                painter.setBrush(QColor("#4a90e2"))
+                painter.setBrush(QColor("#5a9fd4"))
             else:
-                painter.setBrush(QColor("#3e3e3e"))
-            painter.setPen(QPen(QColor("#555555"), 1))
-            painter.drawRoundedRect(self.up_thread_rect, 3, 3)
+                painter.setBrush(QColor("#4a7ba7"))  # More visible blue-gray color
+            painter.setPen(QPen(QColor("#6ab7ff"), 2))  # Brighter border
+            painter.drawRoundedRect(self.up_thread_rect, 4, 4)
             
-            # Draw up arrow
-            painter.setPen(QPen(QColor("#ffffff"), 2))
+            # Draw up arrow - larger and more visible
+            painter.setPen(QPen(QColor("#ffffff"), 3))  # Thicker pen
             arrow_center_x = self.up_thread_rect.center().x()
             arrow_center_y = self.up_thread_rect.center().y()
-            painter.drawLine(int(arrow_center_x), int(arrow_center_y + 2),
-                           int(arrow_center_x), int(arrow_center_y - 2))
-            painter.drawLine(int(arrow_center_x), int(arrow_center_y - 2),
-                           int(arrow_center_x - 3), int(arrow_center_y))
-            painter.drawLine(int(arrow_center_x), int(arrow_center_y - 2),
-                           int(arrow_center_x + 3), int(arrow_center_y))
+            # Vertical line (longer)
+            painter.drawLine(int(arrow_center_x), int(arrow_center_y + 4),
+                           int(arrow_center_x), int(arrow_center_y - 4))
+            # Arrow head (wider)
+            painter.drawLine(int(arrow_center_x), int(arrow_center_y - 4),
+                           int(arrow_center_x - 5), int(arrow_center_y + 1))
+            painter.drawLine(int(arrow_center_x), int(arrow_center_y - 4),
+                           int(arrow_center_x + 5), int(arrow_center_y + 1))
         else:
             self.up_thread_rect = QRectF(0, 0, 0, 0)
         
         # Down button (always show, will check validity on click)
-        # Position down button below up button with proper spacing
-        # If up button exists, place down button below it; otherwise use same Y as up button would be
-        if thread_view_index > 0:
-            down_button_y = thread_button_y_start + thread_button_size + 2
-        else:
-            # No up button, so down button can be at the same Y position
-            down_button_y = thread_button_y_start
+        # Position down button at top-right of the node (inside node bounds)
+        down_button_y = 4  # Small margin from top
+        down_button_x = self.width - thread_button_size - 4  # Small margin from right
+        self.down_thread_rect = QRectF(down_button_x, down_button_y, thread_button_size, thread_button_size)
         
-        # Ensure down button doesn't exceed node bounds
-        max_y = self.height - thread_button_size - 4
-        if down_button_y > max_y:
-            down_button_y = max_y
-        
-        self.down_thread_rect = QRectF(thread_button_x, down_button_y, thread_button_size, thread_button_size)
-        
-        # #region agent log
-        try:
-            with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"debugger_ui.py:615","message":"Down button rect calculated","data":{"down_button_y":down_button_y,"thread_button_x":thread_button_x,"thread_button_size":thread_button_size,"thread_x_offset":thread_x_offset,"thread_view_index":thread_view_index,"node_height":self.height},"timestamp":int(__import__('time').time()*1000)}) + '\n')
-        except: pass
-        # #endregion
-        
-        # Draw button background
+        # Draw button background with more visible colors
         if self.hover_swap_button == 'down':
-            painter.setBrush(QColor("#4a90e2"))
+            painter.setBrush(QColor("#5a9fd4"))
         else:
-            painter.setBrush(QColor("#3e3e3e"))
-        painter.setPen(QPen(QColor("#555555"), 1))
-        painter.drawRoundedRect(self.down_thread_rect, 3, 3)
+            painter.setBrush(QColor("#4a7ba7"))  # More visible blue-gray color
+        painter.setPen(QPen(QColor("#6ab7ff"), 2))  # Brighter border
+        painter.drawRoundedRect(self.down_thread_rect, 4, 4)
         
-        # Draw down arrow
-        painter.setPen(QPen(QColor("#ffffff"), 2))
+        # Draw down arrow - larger and more visible
+        painter.setPen(QPen(QColor("#ffffff"), 3))  # Thicker pen
         arrow_center_x = self.down_thread_rect.center().x()
         arrow_center_y = self.down_thread_rect.center().y()
-        painter.drawLine(int(arrow_center_x), int(arrow_center_y - 2),
-                       int(arrow_center_x), int(arrow_center_y + 2))
-        painter.drawLine(int(arrow_center_x), int(arrow_center_y + 2),
-                       int(arrow_center_x - 3), int(arrow_center_y))
-        painter.drawLine(int(arrow_center_x), int(arrow_center_y + 2),
-                       int(arrow_center_x + 3), int(arrow_center_y))
+        # Vertical line (longer)
+        painter.drawLine(int(arrow_center_x), int(arrow_center_y - 4),
+                       int(arrow_center_x), int(arrow_center_y + 4))
+        # Arrow head (wider)
+        painter.drawLine(int(arrow_center_x), int(arrow_center_y + 4),
+                       int(arrow_center_x - 5), int(arrow_center_y - 1))
+        painter.drawLine(int(arrow_center_x), int(arrow_center_y + 4),
+                       int(arrow_center_x + 5), int(arrow_center_y - 1))
         
         # Draw output anchor (green circle)
         painter.setBrush(QColor("#4CAF50"))
@@ -1184,6 +1173,13 @@ class NodeGraphView(QGraphicsView):
             
         # Ensure thread_view_index exists
         tid = node_data["thread_id"]
+        # #region agent log
+        try:
+            import json
+            with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"debugger_ui.py:1203","message":"Thread view index assignment start","data":{"node_id":node_data.get("id"),"node_name":node_data.get("node_name"),"thread_id":tid,"has_thread_view_index":"thread_view_index" in node_data,"current_thread_view_index":node_data.get("thread_view_index"),"thread_view_indices_dict":dict(self.thread_view_indices)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        except: pass
+        # #endregion
         if "thread_view_index" not in node_data:
             if tid in self.thread_view_indices:
                 node_data["thread_view_index"] = self.thread_view_indices[tid]
@@ -1195,10 +1191,22 @@ class NodeGraphView(QGraphicsView):
                 next_idx = max(current_indices) + 1 if current_indices else 0
                 self.thread_view_indices[tid] = next_idx
                 node_data["thread_view_index"] = next_idx
+                # #region agent log
+                try:
+                    with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"debugger_ui.py:1215","message":"New thread index assigned","data":{"thread_id":tid,"assigned_index":next_idx,"current_indices":list(current_indices)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+                except: pass
+                # #endregion
         else:
              # Sync back to manager if not present
              if tid not in self.thread_view_indices:
                  self.thread_view_indices[tid] = node_data["thread_view_index"]
+        # #region agent log
+        try:
+            with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"debugger_ui.py:1219","message":"Thread view index assignment complete","data":{"node_id":node_data.get("id"),"thread_id":tid,"final_thread_view_index":node_data.get("thread_view_index"),"thread_view_indices_dict":dict(self.thread_view_indices)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        except: pass
+        # #endregion
 
         # Enforce X Coordinate based on ID
         # ID 1 -> 0
@@ -1383,6 +1391,13 @@ class NodeGraphView(QGraphicsView):
             "parent_id": parent_item.node_data.get("id"),
             "thread_view_index": next_idx
         }
+        # #region agent log
+        try:
+            import json
+            with open(r'd:\desktop\simple-llm-playground\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"debugger_ui.py:1384","message":"Branch node created","data":{"parent_id":parent_item.node_data.get("id"),"new_thread_id":new_thread_id,"assigned_thread_view_index":next_idx,"all_thread_indices":dict(self.thread_view_indices)},"timestamp":int(__import__('time').time()*1000)}) + '\n')
+        except: pass
+        # #endregion
         # Y will be calculated by add_node
         self.add_node(new_data, 0, 0)
         self.update_connections()
