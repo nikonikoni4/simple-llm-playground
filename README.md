@@ -26,7 +26,7 @@
 pip install -r requirements.txt
 ```
 
-2. 配置模型
+2. 配置模型(在main.py中配置)
 
 ```python
 # main.py
