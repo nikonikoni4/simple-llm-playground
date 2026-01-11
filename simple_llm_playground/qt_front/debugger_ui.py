@@ -3,7 +3,7 @@ import os
 import json
 import random
 
-# Ensure we can find the sibling package 'data_driving_agent_v2'
+# Ensure we can find the sibling package 'llm_linear_executor'
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
@@ -11,24 +11,36 @@ if parent_dir not in sys.path:
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QSplitter, QGroupBox, QFormLayout, 
-                             QLineEdit, QCheckBox, QDoubleSpinBox, QTextEdit, 
+                             QLineEdit, QCheckBox, QDoubleSpinBox, QSpinBox, QTextEdit, 
                              QComboBox, QPushButton, QGraphicsView, QGraphicsScene, 
                              QGraphicsItem, QGraphicsRectItem, QGraphicsTextItem,
                              QGraphicsLineItem, QGraphicsPathItem, QMenu, QLabel, 
                              QFrame, QSizePolicy, QToolBar, QAction, 
                              QGraphicsDropShadowEffect, QFileDialog, QMessageBox,
-                             QTabWidget, QScrollArea, QTextBrowser)
+                             QTabWidget, QScrollArea, QTextBrowser, QListWidget, 
+                             QListWidgetItem, QAbstractScrollArea)
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import QPen, QBrush, QColor, QWheelEvent, QPainter, QPainterPath, QFont
 
-# Import schemas to ensure we match the data structure
-# Adjust import path if needed based on execution context
+# Import execution control panel
+from .execution_panel import ExecutionControlPanel
+
 try:
-    from data_driving_agent_v2.data_driving_schemas import ALL_NODE_TYPES
+    from config import BACKEND_PORT
+except ImportError:
+    # Try relative import if running as package
+    try:
+        from ..config import BACKEND_PORT
+    except ImportError:
+        BACKEND_PORT = 8001
+
+# Import schemas to ensure we match the data structure
+try:
+    from .data_driving_schemas import ALL_NODE_TYPES
 except ImportError:
     # Fallback/Mock if direct import fails (e.g. running script directly from subfolder)
     # Using list for stable ordering in UI
-    ALL_NODE_TYPES = ["llm-first", "tool-first", "planning"]
+    ALL_NODE_TYPES = ["llm-first", "tool-first"]  # plan 未实现
 
 # --- Dark Theme Stylesheet ---
 DARK_STYLESHEET = """
@@ -135,6 +147,11 @@ THREAD_COLORS = [
     "#FF5722",  # Deep Orange
 ]
 
+class NoScrollComboBox(QComboBox):
+    """A QComboBox that ignores wheel events (scrolling) so parent widgets can scroll instead"""
+    def wheelEvent(self, event):
+        event.ignore()
+
 class CollapsibleSection(QWidget):
     """A collapsible section widget with a header that can be clicked to expand/collapse"""
     def __init__(self, title="Section", parent=None):
@@ -198,7 +215,8 @@ class NodeContextPanel(QGroupBox):
         # Context Messages Section
         self.context_section = CollapsibleSection("Context Information")
         self.context_browser = QTextBrowser()
-        self.context_browser.setMaximumHeight(200)
+        self.context_browser.setMinimumHeight(200)
+        self.context_browser.setMaximumHeight(1200)
         self.context_browser.setPlaceholderText("No context data available")
         self.context_section.set_content(self.context_browser)
         self.main_layout.addWidget(self.context_section)
@@ -206,7 +224,8 @@ class NodeContextPanel(QGroupBox):
         # LLM Input Prompt Section
         self.prompt_section = CollapsibleSection("LLM Input Prompt")
         self.prompt_browser = QTextBrowser()
-        self.prompt_browser.setMaximumHeight(200)
+        self.prompt_browser.setMinimumHeight(300)
+        self.prompt_browser.setMaximumHeight(1200)
         self.prompt_browser.setPlaceholderText("No prompt data available")
         self.prompt_section.set_content(self.prompt_browser)
         self.main_layout.addWidget(self.prompt_section)
@@ -214,7 +233,8 @@ class NodeContextPanel(QGroupBox):
         # Node Output Section
         self.output_section = CollapsibleSection("Node Output")
         self.output_browser = QTextBrowser()
-        self.output_browser.setMaximumHeight(200)
+        self.output_browser.setMinimumHeight(300)
+        self.output_browser.setMaximumHeight(1200)
         self.output_browser.setPlaceholderText("No output data available")
         self.output_section.set_content(self.output_browser)
         self.main_layout.addWidget(self.output_section)
@@ -259,6 +279,88 @@ class NodeContextPanel(QGroupBox):
         self.context_browser.clear()
         self.prompt_browser.clear()
         self.output_browser.clear()
+    
+    def load_node_context_from_api(self, context_data: dict):
+        """
+        Load and display context information from API response
+        
+        Args:
+            context_data: Dict containing node_id, node_name, thread_id,
+                         thread_messages_before, thread_messages_after,
+                         llm_input, llm_output, tool_calls, data_out_content
+        """
+        node_name = context_data.get("node_name", "Unknown")
+        node_id = context_data.get("node_id", "?")
+        thread_id = context_data.get("thread_id", "main")
+        
+        # Format context messages
+        messages_before = context_data.get("thread_messages_before", [])
+        messages_after = context_data.get("thread_messages_after", [])
+        
+        context_html = f"""
+        <b>Node:</b> {node_name} (ID: {node_id})<br>
+        <b>Thread ID:</b> {thread_id}<br>
+        <b>Status:</b> <span style="color: #4CAF50;">✓ Executed</span><br><br>
+        <b>Messages Before Execution:</b>
+        <div style="background-color: #2d2d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
+        """
+        
+        if messages_before:
+            for msg in messages_before:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")[:200]  # Truncate for preview
+                role_color = "#4CAF50" if role == "assistant" else "#2196F3"
+                context_html += f'<span style="color: {role_color};">[{role}]</span> {content}<br>'
+        else:
+            context_html += "<i>No messages</i>"
+        
+        context_html += "</div>"
+        self.context_browser.setHtml(context_html)
+        
+        # LLM Input Prompt
+        llm_input = context_data.get("llm_input", "")
+        prompt_html = f"""
+        <div style="background-color: #2d2d2d; padding: 8px; border-radius: 4px; white-space: pre-wrap;">
+        {llm_input if llm_input else '<i>No LLM input</i>'}
+        </div>
+        """
+        self.prompt_browser.setHtml(prompt_html)
+        
+        # Node Output (LLM output + tool calls)
+        llm_output = context_data.get("llm_output", "")
+        tool_calls = context_data.get("tool_calls", [])
+        data_out = context_data.get("data_out_content")
+        
+        output_html = f"""
+        <b>LLM Output:</b>
+        <div style="background-color: #2d2d2d; padding: 8px; margin: 4px 0; border-radius: 4px; white-space: pre-wrap;">
+        {llm_output if llm_output else '<i>No LLM output</i>'}
+        </div>
+        """
+        
+        if tool_calls:
+            output_html += "<br><b>Tool Calls:</b>"
+            for tc in tool_calls:
+                tool_name = tc.get("name", "unknown")
+                tool_args = tc.get("args", {})
+                tool_result = tc.get("result", "")
+                output_html += f"""
+                <div style="background-color: #3d3d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
+                <span style="color: #FFC107;">🔧 {tool_name}</span><br>
+                <b>Args:</b> {tool_args}<br>
+                <b>Result:</b> {str(tool_result)[:100]}...
+                </div>
+                """
+        
+        if data_out:
+            output_html += f"""
+            <br><b>Data Output:</b>
+            <div style="background-color: #2d3d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
+            {data_out}
+            </div>
+            """
+        
+        self.output_browser.setHtml(output_html)
 
 class NodeItem(QGraphicsItem):
     """
@@ -291,6 +393,15 @@ class NodeItem(QGraphicsItem):
         self.setAcceptHoverEvents(True)
             
         self.setFlags(flags)
+        
+        # Execution status tracking
+        self.execution_status = "pending"  # pending/running/completed/failed
+        self.STATUS_COLORS = {
+            "pending": QColor("#666666"),
+            "running": QColor("#FFC107"),
+            "completed": QColor("#4CAF50"),
+            "failed": QColor("#F44336")
+        }
         
         # Cache colors
         self._update_colors()
@@ -445,6 +556,34 @@ class NodeItem(QGraphicsItem):
         painter.setBrush(QColor("#4CAF50"))
         painter.setPen(QPen(QColor("#2E7D32"), 1))
         painter.drawEllipse(self.output_anchor_rect)
+        
+        # Draw execution status indicator (top-right corner)
+        if self.execution_status != "pending":
+            status_color = self.STATUS_COLORS.get(self.execution_status, QColor("#666666"))
+            status_size = 12
+            status_x = self.width - status_size - 4
+            status_y = 4
+            painter.setBrush(status_color)
+            painter.setPen(QPen(status_color.darker(120), 1))
+            painter.drawEllipse(int(status_x), int(status_y), status_size, status_size)
+            
+            # Draw icon inside status indicator
+            painter.setPen(QPen(QColor("#ffffff"), 2))
+            center_x = status_x + status_size / 2
+            center_y = status_y + status_size / 2
+            
+            if self.execution_status == "completed":
+                # Draw checkmark
+                painter.drawLine(int(center_x - 3), int(center_y), int(center_x - 1), int(center_y + 2))
+                painter.drawLine(int(center_x - 1), int(center_y + 2), int(center_x + 3), int(center_y - 2))
+            elif self.execution_status == "running":
+                # Draw dot
+                painter.setBrush(QColor("#ffffff"))
+                painter.drawEllipse(int(center_x - 2), int(center_y - 2), 4, 4)
+            elif self.execution_status == "failed":
+                # Draw X
+                painter.drawLine(int(center_x - 2), int(center_y - 2), int(center_x + 2), int(center_y + 2))
+                painter.drawLine(int(center_x + 2), int(center_y - 2), int(center_x - 2), int(center_y + 2))
 
 
     def mouseDoubleClickEvent(self, event):
@@ -475,6 +614,12 @@ class NodeItem(QGraphicsItem):
             self.hover_swap_button = None
             self.update()
         super().hoverLeaveEvent(event)
+    
+    def set_execution_status(self, status: str):
+        """Set execution status and trigger repaint"""
+        if status in self.STATUS_COLORS:
+            self.execution_status = status
+            self.update()  # Trigger repaint
 
 
 class ConnectionLine(QGraphicsPathItem):
@@ -626,9 +771,17 @@ class NodeGraphView(QGraphicsView):
         self.drag_start_item = None
         self.drag_temp_line = None
         
-        # Test Data
-        self.add_node({"node_name": "Start", "node_type": "llm-first", "thread_id": "main", "task_prompt": "Start task", "fixed": True}, 0, 0)
-        self.centerOn(0, 0)
+        # Thread View Index Management
+        self.thread_view_indices = {} # thread_id -> index (int)
+        
+        # Test Data - Position at bottom-left area (positive Y goes down in Qt)
+        # Use Y=200 as baseline for main thread (appears in lower area of screen)
+        self.main_y_baseline = 200
+        self.add_node({"node_name": "main", "node_type": "llm-first", "thread_id": "main", "task_prompt": "", "fixed": True, "thread_view_index": 0}, 0, self.main_y_baseline)
+        
+        # Center view on bottom-left area to show first node at screen's bottom-left
+        # Offset the center to the right and down to position first node at bottom-left
+        self.center_to_bottom_left()
         
         # Add overlay button
         self.add_btn = QPushButton("+", self)
@@ -660,6 +813,26 @@ class NodeGraphView(QGraphicsView):
         shadow.setColor(QColor(0, 0, 0, 100))
         shadow.setOffset(0, 4)
         self.add_btn.setGraphicsEffect(shadow)
+    
+    def center_to_bottom_left(self):
+        """Center view to show first node at bottom-left of screen"""
+        # Get the visible viewport size
+        viewport_rect = self.viewport().rect()
+        viewport_width = viewport_rect.width()
+        viewport_height = viewport_rect.height()
+        
+        # Calculate offset to position node (at 0, main_y_baseline) at bottom-left of viewport
+        # We want the node to appear with some margin from the edges
+        margin_x = 150  # Horizontal margin from left edge
+        margin_y = 150  # Vertical margin from bottom edge
+        
+        # Center point calculation: we want the node at (0, main_y_baseline) to appear
+        # at (margin_x, viewport_height - margin_y) in viewport coordinates
+        # So the center of the view should be at:
+        center_x = 0 + (viewport_width / 2 - margin_x)
+        center_y = self.main_y_baseline + (viewport_height / 2 - margin_y)
+        
+        self.centerOn(-center_x + margin_x, center_y - margin_y)
 
     def get_thread_color(self, thread_id: str) -> QColor:
         """Get or create a color for a thread_id"""
@@ -773,8 +946,25 @@ class NodeGraphView(QGraphicsView):
         # ID re-mapping for parent/child consistency
         old_id_map = {}
         
+        # Map existing thread indices if present
+        for node in nodes_data:
+            tid = node.get("thread_id", "main")
+            tidx = node.get("thread_view_index")
+            if tidx is not None and tid not in self.thread_view_indices:
+                self.thread_view_indices[tid] = tidx
+
         # First pass: Assign new IDs and Map
         for node in nodes_data:
+            # Ensure thread_view_index
+            tid = node.get("thread_id", "main")
+            if tid not in self.thread_view_indices:
+                # Assign new index: max + 1
+                current_indices = self.thread_view_indices.values()
+                next_idx = max(current_indices) + 1 if current_indices else 0
+                self.thread_view_indices[tid] = next_idx
+            
+            node["thread_view_index"] = self.thread_view_indices[tid]
+
             old_id = node.get("id")
             new_id = self.next_node_id
             
@@ -811,10 +1001,23 @@ class NodeGraphView(QGraphicsView):
             if pid in old_id_map:
                 node["parent_id"] = old_id_map[pid]
             
-            # Determine Y
-            y = 0
+            # Determine Y based on thread_view_index (Top-Down per requirement)
+            # "One vertical coordinate can only have one thread"
+            # User Feedback: "id越大应该是往上的" (Larger ID should be upwards).
+            # In Qt, Up is negative Y relative to baseline.
+            # So we SUBTRACT the offset.
+            
+            tidx = node.get("thread_view_index", 0)
+            thread_gap_y = 120 # Vertical spacing between threads
+            
+            y = self.main_y_baseline - (tidx * thread_gap_y)
+            
+            # Override with saved _ui_pos ONLY for X (dragged horizontally?) 
+            # Or ignore Y completely to enforce strict layout.
             if "_ui_pos" in node:
-                y = node["_ui_pos"][1]
+                # node["_ui_pos"][1] = y # Force Y to match thread
+                pass 
+            
             
             # X is determined by ID in add_node
             self.add_node(node, 0, y)
@@ -838,6 +1041,20 @@ class NodeGraphView(QGraphicsView):
         
         # Update all connections since thread relationships may have changed
         self.update_connections()
+    
+    def update_node_status(self, node_id: int, status: str):
+        """
+        Update the execution status of a specific node by ID
+        
+        Args:
+            node_id: The ID of the node to update
+            status: One of 'pending', 'running', 'completed', 'failed'
+        """
+        nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
+        for node in nodes:
+            if node.node_data.get("id") == node_id:
+                node.set_execution_status(status)
+                break
 
     def add_node(self, node_data, x, y, force_id=None):
         # Enforce ID
@@ -858,12 +1075,41 @@ class NodeGraphView(QGraphicsView):
         # Ensure thread_id exists
         if "thread_id" not in node_data:
             node_data["thread_id"] = "main"
-        
+            
+        # Ensure thread_view_index exists
+        tid = node_data["thread_id"]
+        if "thread_view_index" not in node_data:
+            if tid in self.thread_view_indices:
+                node_data["thread_view_index"] = self.thread_view_indices[tid]
+            else:
+                # New thread dynamic assignment
+                # Warning: adding a simple node shouldn't usually create a new thread index unless it IS a new thread.
+                # If it's a new thread_id not seen before, assign next index.
+                current_indices = self.thread_view_indices.values()
+                next_idx = max(current_indices) + 1 if current_indices else 0
+                self.thread_view_indices[tid] = next_idx
+                node_data["thread_view_index"] = next_idx
+        else:
+             # Sync back to manager if not present
+             if tid not in self.thread_view_indices:
+                 self.thread_view_indices[tid] = node_data["thread_view_index"]
+
         # Enforce X Coordinate based on ID
         # ID 1 -> 0
         # ID 2 -> GAP
         # ...
         calculated_x = (node_id - 1) * self.node_gap_x
+        
+        # Enforce Y Coordinate based on thread_view_index
+        thread_gap_y = 120
+        tidx = node_data["thread_view_index"]
+        # Larger Index = Higher Up = Smaller Y value
+        calculated_y = self.main_y_baseline - (tidx * thread_gap_y)
+        
+        # Ignore passed 'y' argument in favor of strict thread layout?
+        # The 'y' arg is often calculated from parent.y() - 120 etc.
+        # We should use strict calculation.
+        y = calculated_y
         
         # Get thread color
         thread_color = self.get_thread_color(node_data["thread_id"])
@@ -970,6 +1216,7 @@ class NodeGraphView(QGraphicsView):
             add_node_action = menu.addAction("Add Node")
             add_branch_action = menu.addAction("Create Branch Point")
             menu.addSeparator()
+            delete_thread_action = menu.addAction("Delete Thread")
             delete_action = menu.addAction("Delete Node")
             
             action = menu.exec_(self.mapToGlobal(event.pos()))
@@ -980,6 +1227,8 @@ class NodeGraphView(QGraphicsView):
                 self.add_branch_from(item)
             elif action == delete_action:
                 self.delete_node(item)
+            elif action == delete_thread_action:
+                self.delete_thread(item)
 
     def add_new_node_from(self, parent_item):
         # Extension: Same Y level, same thread
@@ -990,7 +1239,7 @@ class NodeGraphView(QGraphicsView):
             "node_name": "New Node", 
             "node_type": "llm-first", 
             "thread_id": parent_thread,
-            "task_prompt": "New task...",
+            "task_prompt": "",
             "parent_id": parent_item.node_data.get("id")
         }
         self.add_node(new_data, 0, new_y)
@@ -1003,16 +1252,25 @@ class NodeGraphView(QGraphicsView):
         
         # Create new thread id for branch
         new_thread_id = f"branch_{self.next_node_id}"
+
+        # Use next available index
+        current_indices = self.thread_view_indices.values()
+        next_idx = max(current_indices) + 1 if current_indices else 1 # 0 is main
+        
+        # Register new thread
+        self.thread_view_indices[new_thread_id] = next_idx
         
         new_data = {
             "node_name": "Branch", 
             "node_type": "llm-first",
             "thread_id": new_thread_id,
             "parent_thread_id": parent_thread,
-            "task_prompt": "Branch task...",
+            "task_prompt": "",
             "parent_id": parent_item.node_data.get("id"),
+            "thread_view_index": next_idx
         }
-        self.add_node(new_data, 0, new_y)
+        # Y will be calculated by add_node
+        self.add_node(new_data, 0, 0)
         self.update_connections()
 
     def delete_node(self, item):
@@ -1034,6 +1292,49 @@ class NodeGraphView(QGraphicsView):
         
         self.update_connections()
     
+    def delete_thread(self, item):
+        """
+        Delete the entire thread that this node belongs to.
+        Apply specific shift logic: 'others smaller than his thread coordinate id + 1'
+        """
+        thread_id = item.node_data.get("thread_id", "main")
+        if thread_id == "main":
+            print("Cannot delete main thread yet")
+            return
+            
+        deleted_idx = self.thread_view_indices.get(thread_id)
+        if deleted_idx is None:
+            return
+            
+        # 1. Remove all nodes of this thread
+        nodes_to_remove = []
+        for i in self.scene.items():
+            if isinstance(i, NodeItem) and i.node_data.get("thread_id") == thread_id:
+                nodes_to_remove.append(i)
+        
+        for node in nodes_to_remove:
+            self.scene.removeItem(node)
+            
+        # 2. Update Indices
+        # Rule: "Delete that thread's all IDs, others smaller than his thread coordinate id + 1"
+        del self.thread_view_indices[thread_id]
+        
+        for tid, idx in self.thread_view_indices.items():
+            if idx < deleted_idx:
+                self.thread_view_indices[tid] = idx + 1
+        
+        # 3. Update all remaining nodes positions
+        remaining_nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
+        for node in remaining_nodes:
+            tid = node.node_data.get("thread_id", "main")
+            if tid in self.thread_view_indices:
+                new_idx = self.thread_view_indices[tid]
+                node.node_data["thread_view_index"] = new_idx
+                # Recalculate Y (Larger Index = Upwards = Negative Offset)
+                node.setPos(node.x(), self.main_y_baseline - (new_idx * 120))
+        
+        self.update_connections()
+
     def swap_nodes(self, item, direction):
         """
         Swap node with its neighbor.
@@ -1044,6 +1345,16 @@ class NodeGraphView(QGraphicsView):
         """
         current_id = item.node_data.get("id", 0)
         target_id = current_id + direction
+        
+        # Protect ID=1 node - it cannot be swapped
+        if current_id == 1:
+            print("Cannot swap: Node ID 1 (main) is protected and cannot be swapped")
+            return
+        
+        # Cannot swap with ID=1 node
+        if target_id == 1:
+            print("Cannot swap: Cannot swap with Node ID 1 (main) - it is protected")
+            return
         
         # Validate target ID
         if target_id < 1:
@@ -1082,13 +1393,13 @@ class NodeGraphView(QGraphicsView):
         print(f"Swapped nodes: {current_id} ↔ {target_id}")
 
     def add_node_at_center(self):
-        # Always add to main axis Y=0
+        # Always add to main axis at main_y_baseline
         new_data = {
             "node_name": "New Node", 
             "node_type": "llm-first", 
-            "task_prompt": "New task..."
+            "task_prompt": ""
         }
-        self.add_node(new_data, 0, 0)
+        self.add_node(new_data, 0, self.main_y_baseline)
 
 class NodePropertyEditor(QGroupBox):
     nodeDataChanged = pyqtSignal()  # Signal emitted when node data is saved
@@ -1128,6 +1439,8 @@ class NodePropertyEditor(QGroupBox):
         self.columns_layout.addLayout(self.right_form, 1)
         
         self.current_node_data = None
+        self._loading_data = False  # Flag to prevent auto-save during load
+        self._available_tools = {}  # Cache for available tools from backend
         
         # --- Core Identifiers ---
         self.name_edit = QLineEdit()
@@ -1138,24 +1451,30 @@ class NodePropertyEditor(QGroupBox):
         self.branch_name_edit = QLineEdit()
         self.branch_name_edit.setPlaceholderText("Branch name (thread_id)")
         
-        # --- LLM Config ---
+        # --- Task Prompt (will be in separate tab) ---
         self.prompt_edit = QTextEdit()
-        self.prompt_edit.setMaximumHeight(80)
         self.prompt_edit.setPlaceholderText("Task Prompt (leave empty for tool-only)")
         
-        # --- Tools Config ---
-        self.tools_edit = QLineEdit()
-        self.tools_edit.setPlaceholderText("Comma separated tool names")
+        # --- Tools Config (will be in separate Tools tab) ---
+        # Tools selection using checkboxes in a list widget
+        # Tools selection using properties checkboxes container
+        self.tools_container = QWidget()
+        self.tools_container_layout = QVBoxLayout(self.tools_container)
+        self.tools_container_layout.setContentsMargins(20, 0, 0, 0)
+        self.tools_container_layout.setSpacing(5)
+        self.tool_checkboxes = {} # name -> QCheckBox
         
         self.enable_tool_loop_cb = QCheckBox("Enable Tool Loop")
         
         # --- Tool First Specific ---
-        self.initial_tool_name_edit = QLineEdit()
-        self.initial_tool_name_edit.setPlaceholderText("Initial Tool Name (Required for tool-first)")
+        # Init Tool selection using dropdown
+        self.initial_tool_combo = NoScrollComboBox()
+        self.initial_tool_combo.addItem("Select initial tool...")
+        self.initial_tool_combo.currentTextChanged.connect(self._on_init_tool_selected)
         
         self.initial_tool_args_edit = QTextEdit()
         self.initial_tool_args_edit.setPlaceholderText('Initial Args e.g. {"arg": "val"}')
-        self.initial_tool_args_edit.setMaximumHeight(60)
+        self.initial_tool_args_edit.setMinimumHeight(300)
 
         # --- Data Flow Input ---
         self.data_in_thread_edit = QLineEdit()
@@ -1167,7 +1486,7 @@ class NodePropertyEditor(QGroupBox):
         # --- Data Flow Output ---
         self.data_out_cb = QCheckBox("Output Data to Parent")
         self.data_out_thread_edit = QLineEdit()
-        self.data_out_thread_edit.setPlaceholderText("Target Thread ID (defaults to parent_thread_id)")
+        self.data_out_thread_edit.setPlaceholderText("Target Thread ID (defaults to main)")
         self.desc_edit = QLineEdit()
         self.desc_edit.setPlaceholderText("Description of output data")
         
@@ -1175,22 +1494,14 @@ class NodePropertyEditor(QGroupBox):
         self.type_combo.currentTextChanged.connect(self.update_field_visibility)
         
         # --- Layout Assembly for Node Setting Tab ---
+        # Node Setting tab now only contains: name, type, branch, data input, data output
         
         # LEFT COLUMN
         self.left_form.addRow("Name:", self.name_edit)
         self.left_form.addRow("Type:", self.type_combo)
         self.left_form.addRow("Branch:", self.branch_name_edit)
-        self.left_form.addRow("Task Prompt:", self.prompt_edit)
-        self.left_form.addRow("Tools:", self.tools_edit)
-        self.left_form.addRow("", self.enable_tool_loop_cb)
         
         # RIGHT COLUMN
-        # Tool First Section
-        self.tool_first_group_label = QLabel("--- Tool First Settings ---")
-        self.right_form.addRow(self.tool_first_group_label)
-        self.right_form.addRow("Init Tool:", self.initial_tool_name_edit)
-        self.right_form.addRow("Init Args:", self.initial_tool_args_edit)
-        
         # Data Input Section
         self.right_form.addRow(QLabel("--- Data Input ---"))
         self.right_form.addRow("Src Thread:", self.data_in_thread_edit)
@@ -1201,6 +1512,81 @@ class NodePropertyEditor(QGroupBox):
         self.right_form.addRow("", self.data_out_cb)
         self.right_form.addRow("Out Thread:", self.data_out_thread_edit)
         self.right_form.addRow("Out Desc:", self.desc_edit)
+        
+        # --- Task Prompt Tab ---
+        self.task_prompt_tab = QWidget()
+        task_prompt_layout = QVBoxLayout(self.task_prompt_tab)
+        task_prompt_layout.setContentsMargins(0, 0, 0, 0)  # No margins for full screen
+        task_prompt_layout.setSpacing(0)
+        
+        # Add the prompt editor to fill the entire tab
+        task_prompt_layout.addWidget(self.prompt_edit)
+        
+        # --- Tools Tab ---
+        self.tools_tab = QWidget()
+        tools_main_layout = QHBoxLayout(self.tools_tab)
+        tools_main_layout.setContentsMargins(15, 20, 15, 15)
+        tools_main_layout.setSpacing(15)
+        
+        # Left side: Tools selection
+        left_tools_widget = QWidget()
+        tools_layout = QVBoxLayout(left_tools_widget)
+        tools_layout.setContentsMargins(0, 0, 0, 0)
+        tools_layout.setSpacing(10)
+        
+        # Tools Selection (for LLM binding)
+        tools_label = QLabel("Tools (LLM可调用的工具):")
+        tools_label.setStyleSheet("font-weight: bold;")
+        tools_layout.addWidget(tools_label)
+
+        tools_layout.addWidget(self.tools_container)
+        
+        # Enable Tool Loop
+        tools_layout.addWidget(self.enable_tool_loop_cb)
+        
+        # Separator
+        separator1 = QFrame()
+        separator1.setFrameShape(QFrame.Shape.HLine)
+        separator1.setFrameShadow(QFrame.Shadow.Sunken)
+        tools_layout.addWidget(separator1)
+        
+        # Tool First Settings
+        self.tool_first_label = QLabel("--- Tool First Settings ---")
+        tools_layout.addWidget(self.tool_first_label)
+        
+        init_tool_label = QLabel("Initial Tool (首次运行工具):")
+        tools_layout.addWidget(init_tool_label)
+        tools_layout.addWidget(self.initial_tool_combo)
+        
+        init_args_label = QLabel("Initial Args (初始参数):")
+        tools_layout.addWidget(init_args_label)
+        tools_layout.addWidget(self.initial_tool_args_edit)
+        
+        # Add stretch to push to top
+        tools_layout.addStretch()
+        
+        # Right side: Tool parameter information
+        right_tools_widget = QGroupBox("Tool Parameters")
+        right_tools_layout = QVBoxLayout(right_tools_widget)
+        right_tools_layout.setContentsMargins(10, 10, 10, 10)
+        right_tools_layout.setSpacing(5)
+        
+        # Tool info display area
+        self.tool_info_display = QTextEdit()
+        self.tool_info_display.setReadOnly(True)
+        self.tool_info_display.setPlaceholderText("选择一个工具查看其参数信息...")
+        right_tools_layout.addWidget(self.tool_info_display)
+        
+        # Wrap left side in Scroll Area
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setWidget(left_tools_widget)
+        left_scroll.setFrameShape(QFrame.NoFrame) # Optional: remove border if desired
+        
+        # Add to main layout with 1:1 ratio
+        tools_main_layout.addWidget(left_scroll, 1)
+        tools_main_layout.addWidget(right_tools_widget, 1)
+
         
         # --- LLM Setting Tab ---
         self.llm_setting_tab = QWidget()
@@ -1234,10 +1620,12 @@ class NodePropertyEditor(QGroupBox):
         
         # Add tabs to tab widget
         self.tab_widget.addTab(self.node_setting_tab, "Node Setting")
+        self.tab_widget.addTab(self.task_prompt_tab, "Task Prompt")
+        self.tab_widget.addTab(self.tools_tab, "Tools")
         self.tab_widget.addTab(self.llm_setting_tab, "LLM Setting")
         
-        # Save Button
-        self.save_btn = QPushButton("Save Changes")
+        # Save Button (kept for manual trigger if needed)
+        self.save_btn = QPushButton("Save & Update Connections")
         self.save_btn.clicked.connect(self.save_node_data)
         self.main_layout.addWidget(self.save_btn)
         
@@ -1246,13 +1634,165 @@ class NodePropertyEditor(QGroupBox):
         
         # Group widgets for visibility toggling
         self.tool_first_widgets = [
-            self.tool_first_group_label,
-            self.initial_tool_name_edit,
+            self.tool_first_label,
+            self.initial_tool_combo,
             self.initial_tool_args_edit,
-            self.right_form.labelForField(self.initial_tool_name_edit),
-            self.right_form.labelForField(self.initial_tool_args_edit)
         ]
+        
+        # --- Connect Auto-Save Signals ---
+        # All input fields will auto-save on change
+        self.name_edit.textChanged.connect(self._auto_save)
+        self.type_combo.currentTextChanged.connect(self._auto_save)
+        self.branch_name_edit.textChanged.connect(self._auto_save)
+        self.prompt_edit.textChanged.connect(self._auto_save)
+        self.prompt_edit.textChanged.connect(self._auto_save)
+        # self.tools_list_widget.itemChanged.connect(self._on_tools_list_changed) # Removed, connected individually
+        self.enable_tool_loop_cb.stateChanged.connect(self._auto_save)
+        self.enable_tool_loop_cb.stateChanged.connect(self._auto_save)
+        # initial_tool_combo is handled in _on_init_tool_selected
+        self.initial_tool_args_edit.textChanged.connect(self._auto_save)
+        self.data_in_thread_edit.textChanged.connect(self._auto_save)
+        self.data_in_slice_edit.textChanged.connect(self._auto_save)
+        self.data_out_cb.stateChanged.connect(self._auto_save)
+        self.data_out_thread_edit.textChanged.connect(self._auto_save)
+        self.desc_edit.textChanged.connect(self._auto_save)
+        # LLM settings
+        self.temp_spin.valueChanged.connect(self._auto_save)
+        self.topp_spin.valueChanged.connect(self._auto_save)
+        self.enable_search_cb.stateChanged.connect(self._auto_save)
+        self.enable_thinking_cb.stateChanged.connect(self._auto_save)
+        
+        # Load available tools from backend
+        self.load_available_tools()
 
+    def _auto_save(self):
+        """Automatically save data when any field changes"""
+        if not self._loading_data and self.current_node_data is not None:
+            self._save_to_node_data()
+    
+    def load_available_tools(self):
+        """Load available tools from backend API"""
+        try:
+            import requests
+            response = requests.get(f"http://localhost:{BACKEND_PORT}/api/tools", timeout=2)
+            if response.status_code == 200:
+                data = response.json()
+                tools = data.get("tools", [])
+                
+                # Clear existing items
+                self.tool_checkboxes = {}
+                while self.tools_container_layout.count():
+                    child = self.tools_container_layout.takeAt(0)
+                    if child.widget():
+                        child.widget().deleteLater()
+                
+                self.initial_tool_combo.clear()
+                self.initial_tool_combo.addItem("Select initial tool...")
+                
+                # Store tool details for later use
+                self._available_tools = {}
+                self.tool_limit_spinboxes = {}
+                
+                for tool in tools:
+                    tool_name = tool.get("name", "")
+                    self._available_tools[tool_name] = tool
+                    
+                    # Add to tools container
+                    row_widget = QWidget()
+                    row_layout = QHBoxLayout(row_widget)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    
+                    cb = QCheckBox(tool_name)
+                    cb.stateChanged.connect(self._on_tools_list_changed)
+                    
+                    limit_spin = QSpinBox()
+                    limit_spin.setRange(0, 999)
+                    limit_spin.setSpecialValueText("Default")
+                    limit_spin.setPrefix("Limit: ")
+                    limit_spin.setToolTip("Max calls for this tool (0=Executor Default)")
+                    limit_spin.setFixedWidth(120)
+                    limit_spin.valueChanged.connect(self._auto_save)
+                    
+                    row_layout.addWidget(cb)
+                    row_layout.addStretch()
+                    row_layout.addWidget(limit_spin)
+                    
+                    self.tools_container_layout.addWidget(row_widget)
+                    self.tool_checkboxes[tool_name] = cb
+                    self.tool_limit_spinboxes[tool_name] = limit_spin
+                    
+                    # Add to init tool dropdown
+                    self.initial_tool_combo.addItem(tool_name)
+                    
+                print(f"Loaded {len(tools)} tools from backend")
+            else:
+                print(f"Failed to load tools: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"Error loading tools: {e}")
+            # Initialize empty dict if loading fails
+            self._available_tools = {}
+    
+    def _on_tools_list_changed(self):
+        """Handle when tool checkboxes are changed in the list"""
+        # Auto-save when tools selection changes
+        if not self._loading_data and self.current_node_data is not None:
+            self._save_to_node_data()
+    
+    def _on_init_tool_selected(self, tool_name: str):
+        """Handle init tool selection from dropdown"""
+        # Show tool parameters in right panel
+        if tool_name and tool_name != "Select initial tool...":
+            self._display_tool_info(tool_name)
+        else:
+            self.tool_info_display.clear()
+        
+        # Auto-save when init tool changes
+        if not self._loading_data and self.current_node_data is not None:
+            self._save_to_node_data()
+    
+    def _display_tool_info(self, tool_name: str):
+        """Display tool parameter information"""
+        if hasattr(self, '_available_tools') and tool_name in self._available_tools:
+            tool_info = self._available_tools[tool_name]
+            
+            # Format and display tool information
+            info_text = f"Tool Name: {tool_name}\n"
+            info_text += "=" * 60 + "\n\n"
+            
+            description = tool_info.get("description", "No description available")
+            info_text += f"Description:\n{description}\n\n"
+            
+            # Display parameters if available
+            parameters = tool_info.get("parameters", {})
+            if parameters:
+                info_text += "Parameters:\n"
+                info_text += "-" * 60 + "\n"
+                
+                for param_name, param_info in parameters.items():
+                    param_type = param_info.get("type", "Any")
+                    param_required = param_info.get("required", False)
+                    param_desc = param_info.get("description", "")
+                    
+                    # Clean up type string
+                    if "typing." in param_type:
+                        param_type = param_type.replace("typing.", "")
+                    if "<class '" in param_type:
+                        param_type = param_type.split("'")[1] if "'" in param_type else param_type
+                    
+                    required_marker = " (required)" if param_required else " (optional)"
+                    info_text += f"\n  • {param_name}: {param_type}{required_marker}\n"
+                    
+                    if param_desc:
+                        info_text += f"    Description: {param_desc}\n"
+                
+                info_text += "\n"
+            else:
+                info_text += "Parameters: No parameter information available\n\n"
+            
+            self.tool_info_display.setPlainText(info_text)
+        else:
+            self.tool_info_display.setPlainText(f"Tool '{tool_name}' information not available.")
+    
     def update_field_visibility(self, type_text):
         is_tool_first = (type_text == "tool-first")
         
@@ -1260,10 +1800,21 @@ class NodePropertyEditor(QGroupBox):
         for w in self.tool_first_widgets:
             if w: w.setVisible(is_tool_first)
 
-    def load_node(self, node_data):
+
+    def load_node(self, node_data, is_first_in_thread=False):
+        # Disable auto-save during loading
+        self._loading_data = True
+        
         self.current_node_data = node_data
         self.setEnabled(True)
+        
+        # Check if this is node ID 1 (protected main node)
+        is_main_node = node_data.get("id") == 1
+        
         self.name_edit.setText(node_data.get("node_name", ""))
+        # Lock name field for ID=1 node
+        self.name_edit.setReadOnly(is_main_node)
+        self.name_edit.setStyleSheet("background-color: #3e3e3e;" if is_main_node else "")
         
         ntype = node_data.get("node_type", "llm-first")
         # Handle legacy types map
@@ -1273,16 +1824,40 @@ class NodePropertyEditor(QGroupBox):
         
         # Load branch name (thread_id)
         self.branch_name_edit.setText(node_data.get("thread_id", "main"))
+        # Lock branch field for ID=1 node (must stay as 'main')
+        self.branch_name_edit.setReadOnly(is_main_node)
+        self.branch_name_edit.setStyleSheet("background-color: #3e3e3e;" if is_main_node else "")
         
         self.prompt_edit.setText(node_data.get("task_prompt", ""))
         
+        # Load tools - check the items
         tools = node_data.get("tools")
-        self.tools_edit.setText(", ".join(tools) if tools else "")
+        tools_limit = node_data.get("tools_limit") or {}
+        
+        for name, cb in self.tool_checkboxes.items():
+            if tools and name in tools:
+                cb.setChecked(True)
+            else:
+                cb.setChecked(False)
+            
+            # Load limit
+            if hasattr(self, 'tool_limit_spinboxes') and name in self.tool_limit_spinboxes:
+                limit_val = tools_limit.get(name, 0)
+                self.tool_limit_spinboxes[name].setValue(limit_val)
         
         self.enable_tool_loop_cb.setChecked(node_data.get("enable_tool_loop", False))
         
-        # Tool First
-        self.initial_tool_name_edit.setText(node_data.get("initial_tool_name") or "")
+        # Tool First - set init tool combo
+        initial_tool = node_data.get("initial_tool_name") or ""
+        if initial_tool:
+            index = self.initial_tool_combo.findText(initial_tool)
+            if index >= 0:
+                self.initial_tool_combo.setCurrentIndex(index)
+            else:
+                self.initial_tool_combo.setCurrentIndex(0)
+        else:
+            self.initial_tool_combo.setCurrentIndex(0)
+            
         args = node_data.get("initial_tool_args")
         if args:
             try:
@@ -1292,7 +1867,7 @@ class NodePropertyEditor(QGroupBox):
         else:
             self.initial_tool_args_edit.clear()
             
-        # Data Input
+        # Data Input - RESTRICTED: Only first node in thread can edit
         self.data_in_thread_edit.setText(node_data.get("data_in_thread") or "")
         
         slice_val = node_data.get("data_in_slice")
@@ -1305,53 +1880,102 @@ class NodePropertyEditor(QGroupBox):
         else:
             self.data_in_slice_edit.clear()
             
+        # Apply restrictions
+        self.data_in_thread_edit.setEnabled(is_first_in_thread)
+        self.data_in_slice_edit.setEnabled(is_first_in_thread)
+        if not is_first_in_thread:
+            self.data_in_thread_edit.setToolTip("Only the first node of a thread can edit Data Input.")
+            self.data_in_slice_edit.setToolTip("Only the first node of a thread can edit Data Input.")
+        else:
+            self.data_in_thread_edit.setToolTip("")
+            self.data_in_slice_edit.setToolTip("")
+            
         # Data Output
         self.data_out_cb.setChecked(node_data.get("data_out", False))
         self.data_out_thread_edit.setText(node_data.get("data_out_thread") or "")
         self.desc_edit.setText(node_data.get("data_out_description", ""))
+        
+        # LLM Settings
+        self.temp_spin.setValue(node_data.get("temperature", 0.7))
+        self.topp_spin.setValue(node_data.get("top_p", 0.9))
+        self.enable_search_cb.setChecked(node_data.get("enable_search", False))
+        self.enable_thinking_cb.setChecked(node_data.get("enable_thinking", False))
             
         self.update_field_visibility(ntype)
+        
+        # Re-enable auto-save after loading is complete
+        self._loading_data = False
 
-    def save_node_data(self):
-        if self.current_node_data is not None:
-            # Check if branch (thread_id) changed
-            old_thread_id = self.current_node_data.get("thread_id", "main")
-            new_thread_id = self.branch_name_edit.text().strip() or "main"
-            branch_changed = (old_thread_id != new_thread_id)
+    def _save_to_node_data(self):
+        """Internal method to save all fields to node data (used by auto-save)"""
+        if self.current_node_data is None:
+            return
             
+        # Check if this is node ID 1 (protected main node)
+        is_main_node = self.current_node_data.get("id") == 1
+        
+        # For ID=1 node, keep original name
+        if not is_main_node:
             self.current_node_data["node_name"] = self.name_edit.text()
-            self.current_node_data["node_type"] = self.type_combo.currentText()
-            self.current_node_data["thread_id"] = new_thread_id
-            self.current_node_data["task_prompt"] = self.prompt_edit.toPlainText()
-            
-            tools_str = self.tools_edit.text()
-            self.current_node_data["tools"] = [t.strip() for t in tools_str.split(",") if t.strip()] if tools_str else None
-            
-            self.current_node_data["enable_tool_loop"] = self.enable_tool_loop_cb.isChecked()
-            
-            # Save Tool First Data
-            is_tool_first = (self.type_combo.currentText() == "tool-first")
-            if is_tool_first:
-                self.current_node_data["initial_tool_name"] = self.initial_tool_name_edit.text() or None
-                
-                args_str = self.initial_tool_args_edit.toPlainText().strip()
-                if args_str:
-                    try:
-                        self.current_node_data["initial_tool_args"] = json.loads(args_str)
-                    except json.JSONDecodeError:
-                        print("Warning: Invalid JSON in tool args, saving as None")
-                        self.current_node_data["initial_tool_args"] = None
-                else:
-                    self.current_node_data["initial_tool_args"] = None
+        
+        self.current_node_data["node_type"] = self.type_combo.currentText()
+        
+        # For ID=1 node, force thread_id to be 'main'
+        if is_main_node:
+            self.current_node_data["thread_id"] = "main"
+        else:
+            self.current_node_data["thread_id"] = self.branch_name_edit.text().strip() or "main"
+        
+        self.current_node_data["task_prompt"] = self.prompt_edit.toPlainText()
+        
+        # Save tools from list widget
+        checked_tools = []
+        # Save tools from checkboxes
+        checked_tools = []
+        for name, cb in self.tool_checkboxes.items():
+            if cb.isChecked():
+                checked_tools.append(name)
+        self.current_node_data["tools"] = checked_tools if checked_tools else None
+        
+        # Save tools limit
+        tools_limit = {}
+        if hasattr(self, 'tool_limit_spinboxes'):
+             for name, spin in self.tool_limit_spinboxes.items():
+                 if spin.value() > 0:
+                     tools_limit[name] = spin.value()
+        
+        self.current_node_data["tools_limit"] = tools_limit if tools_limit else None
+        
+        self.current_node_data["enable_tool_loop"] = self.enable_tool_loop_cb.isChecked()
+        
+        # Save Tool First Data
+        is_tool_first = (self.type_combo.currentText() == "tool-first")
+        if is_tool_first:
+            init_tool = self.initial_tool_combo.currentText()
+            if init_tool != "Select initial tool...":
+                self.current_node_data["initial_tool_name"] = init_tool
             else:
                 self.current_node_data["initial_tool_name"] = None
-                self.current_node_data["initial_tool_args"] = None
-
-            # Data Input
-            self.current_node_data["data_in_thread"] = self.data_in_thread_edit.text() or None
             
-            slice_str = self.data_in_slice_edit.text().strip()
-            if slice_str:
+            args_str = self.initial_tool_args_edit.toPlainText().strip()
+            if args_str:
+                try:
+                    self.current_node_data["initial_tool_args"] = json.loads(args_str)
+                except json.JSONDecodeError:
+                    # Keep previous value if JSON is invalid during typing
+                    pass
+            else:
+                self.current_node_data["initial_tool_args"] = None
+        else:
+            self.current_node_data["initial_tool_name"] = None
+            self.current_node_data["initial_tool_args"] = None
+
+        # Data Input
+        self.current_node_data["data_in_thread"] = self.data_in_thread_edit.text() or None
+        
+        slice_str = self.data_in_slice_edit.text().strip()
+        if slice_str:
+            try:
                 parts = slice_str.split(',')
                 if len(parts) >= 1:
                     s_txt = parts[0].strip()
@@ -1362,13 +1986,34 @@ class NodePropertyEditor(QGroupBox):
                     self.current_node_data["data_in_slice"] = (s, e)
                 else:
                     self.current_node_data["data_in_slice"] = None
-            else:
-                self.current_node_data["data_in_slice"] = None
+            except ValueError:
+                # Keep previous value if parsing fails during typing
+                pass
+        else:
+            self.current_node_data["data_in_slice"] = None
 
-            # Data Output
-            self.current_node_data["data_out"] = self.data_out_cb.isChecked()
-            self.current_node_data["data_out_thread"] = self.data_out_thread_edit.text() or None
-            self.current_node_data["data_out_description"] = self.desc_edit.text()
+        # Data Output
+        self.current_node_data["data_out"] = self.data_out_cb.isChecked()
+        self.current_node_data["data_out_thread"] = self.data_out_thread_edit.text() or None
+        self.current_node_data["data_out_description"] = self.desc_edit.text()
+        
+        # LLM Settings
+        self.current_node_data["temperature"] = self.temp_spin.value()
+        self.current_node_data["top_p"] = self.topp_spin.value()
+        self.current_node_data["enable_search"] = self.enable_search_cb.isChecked()
+        self.current_node_data["enable_thinking"] = self.enable_thinking_cb.isChecked()
+    
+    def save_node_data(self):
+        """Manual save - updates data and triggers connection updates"""
+        if self.current_node_data is not None:
+            # Check if branch (thread_id) changed
+            old_thread_id = self.current_node_data.get("thread_id", "main")
+            
+            # Save all data first
+            self._save_to_node_data()
+            
+            new_thread_id = self.current_node_data.get("thread_id", "main")
+            branch_changed = (old_thread_id != new_thread_id)
             
             print(f"Saved Node: {self.current_node_data}")
             self.nodeDataChanged.emit()  # Notify graph to update connections
@@ -1404,10 +2049,23 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(10, 10, 10, 10)
         left_layout.setSpacing(10)
         
+        # Execution Control Panel
+        self.execution_panel = ExecutionControlPanel()
+        left_layout.addWidget(self.execution_panel)
+        
+        # Node Context Panel
         self.context_panel = NodeContextPanel()
         left_layout.addWidget(self.context_panel)
         
-        self.main_splitter.addWidget(left_container)
+        # Wrap left container in ScrollArea
+        left_scroll = QScrollArea()
+        left_scroll.setWidget(left_container)
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame) # Clean look
+        left_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        self.main_splitter.addWidget(left_scroll)
         
         # --- Right Panel (Graph + Props) ---
         self.right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -1430,7 +2088,14 @@ class MainWindow(QMainWindow):
         # Connect signals
         self.graph_view.nodeSelected.connect(self.on_node_selected)
         self.prop_editor.nodeDataChanged.connect(self.graph_view.update_connections)
+        self.prop_editor.nodeDataChanged.connect(self._update_execution_plan)
         self.prop_editor.branchChanged.connect(self.graph_view.update_node_color)
+        
+        # Connect execution panel signals
+        self.execution_panel.stepExecuted.connect(self._on_step_executed)
+        self.execution_panel.nodeStatesUpdated.connect(self._on_node_states_updated)
+        self.execution_panel.executionError.connect(self._on_execution_error)
+        self.execution_panel.saveRequested.connect(self.prop_editor.save_node_data)
         
         # Set initial sizes
         self.main_splitter.setSizes([300, 1000])
@@ -1456,8 +2121,47 @@ class MainWindow(QMainWindow):
     
     def on_node_selected(self, node_data):
         """Handle node selection - update both property editor and context panel"""
-        self.prop_editor.load_node(node_data)
+        # Determine if this is the first node in its thread
+        all_nodes = self.graph_view.get_all_nodes_data()
+        current_tid = node_data.get("thread_id", "main")
+        current_id = node_data.get("id", 0)
+        
+        is_first = True
+        for n in all_nodes:
+            if n.get("thread_id", "main") == current_tid:
+                if n.get("id", 0) < current_id:
+                    is_first = False
+                    break
+        
+        self.prop_editor.load_node(node_data, is_first_in_thread=is_first)
         self.context_panel.load_node_context(node_data)
+    
+    def _update_execution_plan(self):
+        """Update the execution plan when node data changes"""
+        nodes_data = self.graph_view.get_all_nodes_data()
+        plan = self.execution_panel.get_plan_from_nodes(nodes_data)
+        self.execution_panel.set_plan(plan)
+    
+    def _on_step_executed(self, node_context: dict):
+        """Handle step execution - update node context panel and node states"""
+        # Update context panel with the executed node's context
+        self.context_panel.load_node_context_from_api(node_context)
+        
+        # Update node visual state
+        node_id = node_context.get("node_id")
+        if node_id:
+            self.graph_view.update_node_status(node_id, "completed")
+    
+    def _on_node_states_updated(self, node_states: list):
+        """Handle node states update from executor"""
+        for state in node_states:
+            node_id = state.get("node_id")
+            status = state.get("status", "pending")
+            self.graph_view.update_node_status(node_id, status)
+    
+    def _on_execution_error(self, error: str):
+        """Handle execution error"""
+        QMessageBox.warning(self, "Execution Error", error)
 
     def load_json_plan(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Plan JSON", "", "JSON Files (*.json)")
@@ -1484,7 +2188,31 @@ class MainWindow(QMainWindow):
                 if "custom" in data and "nodes" in data["custom"]:
                     self.current_plan_data = data
                     nodes = data["custom"]["nodes"]
-                    
+
+                    # Auto-prepend main node if missing (for data flow clarity)
+                    needs_main_node = True
+                    if nodes and nodes[0].get("thread_id") == "main" and nodes[0].get("node_name") == "main":
+                        needs_main_node = False
+
+                    if needs_main_node:
+                        # Create empty main node as data entry point
+                        main_node = {
+                            "node_name": "main",
+                            "node_type": "llm-first",
+                            "thread_id": "main",
+                            "task_prompt": "",  # Empty = no operation, just data relay
+                            "fixed": True,
+                            "thread_view_index": 0,
+                        }
+                        nodes.insert(0, main_node)
+
+                        # Shift existing layout positions to make room for main node
+                        new_layout_data = {}
+                        new_layout_data["main"] = [0.0, 200.0]  # Default main position
+                        for name, pos in layout_data.items():
+                            new_layout_data[name] = [pos[0] + 220.0, pos[1]]
+                        layout_data = new_layout_data
+
                     # 3. Inject Layout Data Back into Nodes
                     for node in nodes:
                         name = node.get("node_name")

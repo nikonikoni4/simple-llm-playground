@@ -1,131 +1,107 @@
-# Data Driving Agent V2
+# Simple LLM Playground
 
-数据驱动的 LLM Agent 执行器，支持多线程上下文隔离和灵活的节点调度。
+一个基于 `llm-linear-executor` 的 Qt 可视化界面，旨在通过图形化操作快速生成、调试和验证 LLM Workflow。
 
----
+<p align="center">图 ：simple-llm-playground界面</p>
 
-## 执行顺序
-按照节点id顺序执行，必须一个线程完成之后才能继续下一个线程
+![alt text](/asset/image.png)
 
-## 新线程的上下文初始化
 
-### 触发时机
+## Simple LLM Playground 能做什么？
 
-新线程的上下文初始化（`data_in`）**只在创建新线程时执行一次**。
+
+- **可视化编排**：通过直观的节点连接生成 Workflow，支持 LLM 节点与 Tool 节点的混合编排。
+- **实时调试**：内置 Executor 引擎，可直接运行设计好的流程，实时查看每一步的输出结果。
+- **自定义扩展**：
+- **自定义工具**：支持通过简单的装饰器将 Python 函数注册为 Tool，通过在main.py中导入工具函数（基于langchain的@tool装饰器的工具函数，或在导入后增加@tool装饰器包装函数），快速接入本地数据或业务逻辑。
+
+## Simple LLM Playground 有什么局限性？
+
+当前只有两种节点llm-first和tool-first，缺少router节点，有些情况下只能多创建一条线程，来实现。（在后续更新中会思考解决这个问题）
+
+## 快速开始
+
+1. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+2. 配置模型
 
 ```python
-# 主执行循环
-for node in self.plan.nodes:
-    if node.thread_id not in self.context["messages"]:  # ← 只有线程不存在时
-        self._create_thread(node.thread_id, parent_id, node)  # ← 才创建线程并注入 data_in
+# main.py
+api_key = "your_api_key" 
+model = "gpt-4o"
+llm_factory = create_llm_factory(model,api_key,chat_model=ChatOpenAI)
 ```
 
-### `_create_thread` 方法行为
+3. 配置工具
+
+在main.py中导入工具函数（基于langchain的@tool装饰器的工具函数，或在导入后增加@tool装饰器包装函数），快速接入本地数据或业务逻辑。
 
 ```python
-def _create_thread(self, thread_id, parent_thread_id, node):
-    if thread_id in self.context["messages"]:
-        return  # ← 线程已存在，直接返回，不执行 data_in 逻辑
-    
-    # 创建新线程并处理 data_in
-    source_thread = node.data_in_thread or parent_thread_id
-    if node.data_in_slice:
-        injected = source_msgs[start:end]
-    else:
-        injected = [source_msgs[-1]]  # 默认取最后一条
+from simple_llm_playground.server.executor_manager import executor_manager
+from your_path import ( tools )
+
+executor_manager.register_tool("your_tool_name", your_tool)
+```
+4. 终端运行
+
+```bash
+.\run.bat
 ```
 
-### 示例场景
+## 界面配置说明
 
-线程 `q1` 有 3 个节点 n1, n2, n3：
+### 1. 加载和保存 Plan
+界面左上角包含两个核心功能：
+- **Load JSON Plan**：加载本地的 `.json` 格式 Plan 文件。加载后，画布将自动渲染节点结构。
+- **Save JSON Plan**：将当前的节点编排保存为 `.json` 文件。
+> **提示**：所有的 Plan 结构及节点内容（包括 Prompt、工具配置等）均以标准的 JSON 格式保存。
 
-| 节点 | 线程状态 | data_in 配置 | 实际效果 |
-|------|----------|-------------|---------|
-| n1 | 线程不存在 → 创建 | `data_in_slice=[0,2]` | ✅ 生效，注入消息 |
-| n2 | 线程已存在 | `data_in_slice=[-1,None]` | ❌ 被忽略 |
-| n3 | 线程已存在 | `data_in_thread="other"` | ❌ 被忽略 |
+### 2. Execute Control (执行控制)
+位于左侧面板，用于控制工作流的生命周期：
+- **Initialize**：初始化执行器状态。加载新 Plan 或修改配置后特别是需要重置上下文时使用。
+- **Stop**：中断当前的执行任务。
+- **Step**：单步执行。点击一次仅执行下一个待运行节点，便于逐步调试和观察中间状态。
+- **Run All**：连续执行整个 Workflow，直到流程结束或出错。
 
-### 重要特性
+### 3. User Message
+- **User Message**：用户输入区域。此处输入的内容将作为初始的用户消息（User Prompt），并默认注入到 `main` 线程中，作为整个 Workflow 的起始上下文数据。
+### 4. Node Context
+位于左侧面板下方，用于展示**当前选中节点**（或最近执行节点）的运行时详情，是调试的核心区域：
+- **Context Information**：显示当前节点输入的所有上下文消息（Message History）。这是执行 `data_in_slice` 切片操作后的最终输入数据。
+- **LLM Input Prompt**：显示实际发送给 LLM 的完整 Prompt（包含 System Prompt 和 Context）。用于检查 Prompt 组装是否符合预期。
+- **Node Output**：显示当前节点执行完成后的输出结果（LLM 的回复内容或工具的执行结果）。
+### 5. Node Setting (节点配置)
+在画布中选中任一节点后，通过底部的 `Node Properties` 面板进行详细配置。各配置项对应 `llm-linear-executor` 的 Schema 定义：
 
-1. **只有第一个节点的 data_in 生效**：同一线程上只有触发线程创建的节点（通常是第一个节点）的 `data_in` 配置会生效
-2. **后续节点的 data_in 被忽略**：线程已存在时，`_create_thread` 直接返回，不会执行任何数据注入
-3. **data_in 配置项**：
-   - `data_in_thread`: 指定数据来源线程（默认为父线程）
-   - `data_in_slice`: 指定消息切片范围 `[start, end)`（默认取最后一条）
+#### Node Setting (基础设置)
+- **Name (`node_name`)**：节点名称，用于标识节点，需保持唯一。
+- **Type (`node_type`)**：节点类型。
+  - `llm-first`：先进行 LLM 思考，再根据需要调用工具。
+  - `tool-first`：强制首先执行指定工具，再由 LLM 分析结果。
+- **Branch (`thread_id`)**：当前节点运行所在的线程 ID。
+- **Src Thread (`data_in_thread`)**：输入数据的来源线程 ID（默认为 `main`）。
+- **Slice (`data_in_slice`)**：输入消息的切片范围。例如 `0,2` 表示取前两条，`-1,` 表示取最后一条。
+- **Output Data to Parent (`data_out`)**：勾选后，该节点的执行结果将被输出。
+- **Out Thread (`data_out_thread`)**：输出结果合并到的目标线程 ID（默认为 `main`）。
+- **Out Desc (`data_out_description`)**：输出数据的描述前缀，用于辅助 LLM 理解数据含义。
 
-## 线程数据合并
+#### Task Prompt
+- **Task Prompt (`task_prompt`)**：该节点的具体任务指令（Prompt）。若 `llm-first` 节点的 Prompt 为空，则该节点仅执行数据搬运（透传），不消耗 LLM Token。
 
-### 核心机制
+#### Tools (工具配置)
+- **Tools (`tools`)**：选择该节点允许调用的工具集合。
+- **Initial Tool (`initial_tool_name`)**：(`tool-first` 节点**必填**) 指定初始运行的工具名称。
+- **Initial Args (`initial_tool_args`)**：初始工具调用的参数配置。
+- **Enable Tool Loop (`enable_tool_loop`)**：是否允许 LLM 进行多轮工具调用（默认 False）。
+- **Tool Limit (`tools_limit`)**：限制特定工具的最大调用次数（例如 `{"web_search": 1}`）。
 
-执行器支持多线程消息隔离，子线程可以通过 `data_out` 标志将结果合并到父线程。
+## 数据流以及其他说明
 
-**关键方法：**
+参考 [llm-linear-executor 文档的 执行顺序](./llm_linear_executor/README.md)
 
-| 方法 | 作用 |
-|------|------|
-| `_set_data_out(thread_id, ...)` | 设置线程的输出数据（覆盖式） |
-| `_merge_data_out_to_parent(thread_id)` | 将 data_out 追加到父线程的 messages |
+## License
 
-### 执行流程
-
-每个节点执行时：
-
-```python
-content = handler(node)           # 执行节点处理器
-
-if node.data_out:                 # 只有 data_out=True 才执行
-    self._merge_data_out_to_parent(node.thread_id)
-```
-
-节点处理器内部（如 `_execute_llm_first_node`）：
-
-```python
-if node.data_out:                 # 只有 data_out=True 才执行
-    self._set_data_out(thread_id, node_type, description, content)
-```
-
-### 示例场景
-
-假设子线程 `q1` 有 3 个节点：
-
-| 节点 | data_out | _set_data_out | _merge_data_out_to_parent | data_out["q1"] | 父线程新增消息 |
-|------|----------|---------------|---------------------------|----------------|---------------|
-| n1 | ✅ True | ✅ → "结果1" | ✅ 执行 | "结果1" | +"结果1" |
-| n2 | ❌ False | ❌ 不执行 | ❌ 不执行 | "结果1"（不变） | 无 |
-| n3 | ✅ True | ✅ → "结果3" | ✅ 执行 | "结果3"（覆盖） | +"结果3" |
-
-**最终状态：**
-
-```python
-# data_out 字典只保留最后一个值
-self.context["data_out"]["q1"] = {"content": "结果3"}
-
-# 父线程 messages 包含所有 data_out=True 节点的输出
-parent_messages = [
-    ...,
-    AIMessage(content="结果1"),  # n1 合并的
-    AIMessage(content="结果3"),  # n3 合并的
-]
-```
-
-### 重要特性
-
-1. **不会重复合并**：每个 `data_out=True` 的节点恰好执行一次 set + merge
-2. **中间节点不影响输出**：`data_out=False` 的节点不会触发任何合并操作
-3. **灵活的外发目标**：同一线程的不同节点可以选择不同的外发目标线程，因为没有强制要求同一线程的 `parent_thread_id` 必须相同。每个节点独立决定其数据流向。
-
-### 数据流示意
-
-```
-主线程 (main)
-    │
-    ├── 子线程 q1
-    │   ├── n1 (data_out=True)  ──→ 合并到 main
-    │   ├── n2 (data_out=False)     (不合并)
-    │   └── n3 (data_out=True)  ──→ 合并到 main
-    │
-    └── 子线程 q2
-        └── n4 (data_out=True)  ──→ 可以合并到 main 或其他线程
-```
-
-> **注意**：`data_out` 字典只保留每个线程的最后一个输出值，但父线程的 messages 会保留所有合并的消息。
+[MIT License](LICENSE) 协议。

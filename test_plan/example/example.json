@@ -1,0 +1,54 @@
+{
+    "custom": {
+        "task": "Custom Analysis Task",
+        "nodes": [
+            {
+                "node_name": "main",
+                "node_type": "tool-first",
+                "thread_id": "main",
+                "task_prompt": "Start task",
+                "fixed": true,
+                "thread_view_index": 0,
+                "id": 1,
+                "tools": null,
+                "enable_tool_loop": false,
+                "initial_tool_name": "add",
+                "initial_tool_args": {
+                    "a": 1,
+                    "b": 1
+                },
+                "data_in_thread": null,
+                "data_in_slice": null,
+                "data_out": true,
+                "data_out_thread": null,
+                "data_out_description": "",
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "enable_search": false,
+                "enable_thinking": false
+            },
+            {
+                "node_name": "New Node",
+                "node_type": "llm-first",
+                "thread_id": "main",
+                "task_prompt": "你好",
+                "parent_id": 1,
+                "id": 2,
+                "thread_view_index": 0,
+                "tools": null,
+                "enable_tool_loop": false,
+                "initial_tool_name": null,
+                "initial_tool_args": null,
+                "data_in_thread": null,
+                "data_in_slice": null,
+                "data_out": false,
+                "data_out_thread": null,
+                "data_out_description": "",
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "enable_search": false,
+                "enable_thinking": false
+            }
+        ]
+    }
+}
