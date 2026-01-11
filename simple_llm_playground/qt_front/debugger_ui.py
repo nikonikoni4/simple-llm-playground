@@ -2097,6 +2097,10 @@ class MainWindow(QMainWindow):
         self.execution_panel.executionError.connect(self._on_execution_error)
         self.execution_panel.saveRequested.connect(self.prop_editor.save_node_data)
         
+        # Connect context loaded signal for node selection
+        self.execution_panel.controller.contextLoaded.connect(self._on_context_loaded)
+        self.execution_panel.controller.contextFailed.connect(self._on_context_failed)
+        
         # Set initial sizes
         self.main_splitter.setSizes([300, 1000])
         self.right_splitter.setSizes([600, 250])
@@ -2134,7 +2138,17 @@ class MainWindow(QMainWindow):
                     break
         
         self.prop_editor.load_node(node_data, is_first_in_thread=is_first)
+        
+        # Always show placeholder first
         self.context_panel.load_node_context(node_data)
+        
+        # Try to load context from API if executor is initialized
+        executor_id = getattr(self.execution_panel.controller, "current_executor_id", None)
+        node_id = node_data.get("id")
+        
+        if executor_id and node_id:
+            # Executor is active, try to get context from API (will override placeholder if successful)
+            self.execution_panel.controller.get_node_context(node_id)
     
     def _update_execution_plan(self):
         """Update the execution plan when node data changes"""
@@ -2162,6 +2176,15 @@ class MainWindow(QMainWindow):
     def _on_execution_error(self, error: str):
         """Handle execution error"""
         QMessageBox.warning(self, "Execution Error", error)
+    
+    def _on_context_loaded(self, context_data: dict):
+        """Handle context loaded from API - update context panel"""
+        self.context_panel.load_node_context_from_api(context_data)
+    
+    def _on_context_failed(self, error: str):
+        """Handle context load failure - node may not be executed yet"""
+        # Show placeholder for unexecuted nodes - context_panel already shows placeholder by default
+        pass
 
     def load_json_plan(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Open Plan JSON", "", "JSON Files (*.json)")
