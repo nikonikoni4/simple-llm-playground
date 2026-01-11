@@ -108,7 +108,11 @@ class AsyncExecutor:
         self.tools_map = tools_map or {}
 
         # 默认工具使用限制（当节点未设置 tools_limit 时使用）
-        self._default_tools_limit = default_tools_limit
+        if default_tools_limit:
+            self._default_tools_limit = default_tools_limit
+        else:
+            self._default_tools_limit = 1
+        
         self.tools_usage_limit = {}
         
         # tokens 使用统计
@@ -321,7 +325,9 @@ class AsyncExecutor:
 
     def _can_use_tool(self, tool_name: str) -> bool:
         """判断指定工具是否还能调用（未声明的工具默认有默认调用次数）"""
+
         return self.tools_usage_limit.get(tool_name, self._default_tools_limit) > 0
+   
     
     def _consume_tool_usage(self, tool_name: str) -> None:
         """消耗一次工具调用次数"""

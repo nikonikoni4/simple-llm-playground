@@ -41,7 +41,7 @@ class InitExecutorRequest(BaseModel):
     """初始化执行器请求"""
     plan: dict  # ExecutionPlan 的字典形式
     user_message: str
-    default_tool_limit: Optional[int] = None  # 默认工具调用次数限制
+    default_tool_limit: Optional[int] = 1  # 默认工具调用次数限制
     llm_config: Optional[ModelConfig] = None  # 重命名避免与 Pydantic 保留字段冲突
 
 
@@ -220,12 +220,13 @@ async def init_executor(request: InitExecutorRequest):
     try:
         # 解析 ExecutionPlan
         plan = ExecutionPlan(**request.plan)
-
+        if request.default_tool_limit is None:
+            request.default_tool_limit = 1
         # 创建执行器
         executor_id = executor_manager.create_executor(
             plan=plan,
             user_message=request.user_message,
-            default_tools_limit=request.default_tool_limit
+            default_tools_limit=request.default_tool_limit # 当这个是None时，导致后面会报错
         )
         
         return InitExecutorResponse(
