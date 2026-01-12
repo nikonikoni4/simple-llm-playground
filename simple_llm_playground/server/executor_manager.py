@@ -1,7 +1,7 @@
 import uuid
 from typing import Any
 from .async_executor import AsyncExecutor
-from .data_driving_schemas import ExecutionPlan
+from llm_linear_executor.schemas import ExecutionPlan
 
 # =============================================================================
 # 执行器管理

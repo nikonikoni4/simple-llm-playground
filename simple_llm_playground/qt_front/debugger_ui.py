@@ -9,6 +9,12 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+# Ensure we can find the sibling package 'llm_linear_executor'
+project_root = os.path.dirname(parent_dir)
+executor_lib_path = os.path.join(project_root, "llm_linear_executor")
+if executor_lib_path not in sys.path:
+    sys.path.insert(0, executor_lib_path)
+
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QSplitter, QGroupBox, QFormLayout, 
                              QLineEdit, QCheckBox, QDoubleSpinBox, QSpinBox, QTextEdit, 
@@ -36,7 +42,7 @@ except ImportError:
 
 # Import schemas to ensure we match the data structure
 try:
-    from .data_driving_schemas import ALL_NODE_TYPES
+    from llm_linear_executor.schemas import ALL_NODE_TYPES
 except ImportError:
     # Fallback/Mock if direct import fails (e.g. running script directly from subfolder)
     # Using list for stable ordering in UI
@@ -425,14 +431,22 @@ class NodeItem(QGraphicsItem):
         self.subtext_color = QColor("#b0b0b0")
 
     def boundingRect(self):
-        # Expand bounds to include the up button which is above the node
-        # Up button is at y = -24 (button size 20 + gap 4), so we need to extend upwards
+        # Expand bounds to include the up/down buttons
+        # Up button: extends above (if index > 0)
+        # Down button: extends below (always)
+        
+        top = -2
+        bottom = self.height + 2
+        
         thread_view_index = self.node_data.get("thread_view_index", 0)
         if thread_view_index > 0:
-            # Include up button area: extends 28 pixels above node (20 button + 4 gap + 4 margin)
-            return QRectF(-2, -28, self.width + 4, self.height + 32)
-        else:
-            return QRectF(-2, -2, self.width + 4, self.height + 4)
+            # Include up button area: 20 button + 4 gap
+            top = -28
+            
+        # Include down button area: 20 button + 4 gap
+        bottom = self.height + 28
+            
+        return QRectF(-2, top, self.width + 4, bottom - top)
 
     def get_output_anchor_center(self) -> QPointF:
         """Get the center of output anchor in scene coordinates"""
@@ -603,9 +617,9 @@ class NodeItem(QGraphicsItem):
             self.up_thread_rect = QRectF(0, 0, 0, 0)
         
         # Down button (always show, will check validity on click)
-        # Position down button at top-right of the node (inside node bounds)
-        down_button_y = 4  # Small margin from top
-        down_button_x = self.width - thread_button_size - 4  # Small margin from right
+        # Position down button at bottom-center of the node (outside node bounds)
+        down_button_y = self.height + 4  # 4px gap below
+        down_button_x = self.width / 2 - thread_button_size / 2  # Center horizontally
         self.down_thread_rect = QRectF(down_button_x, down_button_y, thread_button_size, thread_button_size)
         
         # Draw button background with more visible colors

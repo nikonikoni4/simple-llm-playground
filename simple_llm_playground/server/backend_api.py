@@ -19,7 +19,14 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 
-from .data_driving_schemas import ExecutionPlan
+# 添加 llm_linear_executor 到 sys.path
+# 假设 llm_linear_executor 位于当前项目的兄弟目录
+project_root = os.path.dirname(os.path.dirname(current_dir))
+executor_lib_path = os.path.join(project_root, "llm_linear_executor")
+if executor_lib_path not in sys.path:
+    sys.path.insert(0, executor_lib_path)
+
+from llm_linear_executor.schemas import ExecutionPlan
 from .executor_manager import executor_manager
 
 
