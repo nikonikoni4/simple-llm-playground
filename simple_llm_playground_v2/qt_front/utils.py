@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QComboBox, QWidget, QVBoxLayout, QPushButton, QSizePolicy
 from PyQt5.QtGui import QColor
 
-# --- Dark Theme Stylesheet ---
+# --- 深色主题样式表 ---
 DARK_STYLESHEET = """
 QMainWindow, QWidget {
     background-color: #1e1e1e;
@@ -143,35 +143,35 @@ NODE_COLORS = {
     "default": QColor("#616161")     # Grey
 }
 
-# Thread color palette for visual distinction
+# 用于视觉区分的线程调色板
 THREAD_COLORS = [
-    "#2196F3",  # Blue (typically main)
-    "#4CAF50",  # Green
-    "#FF9800",  # Orange
-    "#9C27B0",  # Purple
-    "#00BCD4",  # Cyan
-    "#E91E63",  # Pink
-    "#8BC34A",  # Light Green
-    "#FF5722",  # Deep Orange
+    "#2196F3",  # 蓝色 (通常是主线程)
+    "#4CAF50",  # 绿色
+    "#FF9800",  # 橙色
+    "#9C27B0",  # 紫色
+    "#00BCD4",  # 青色
+    "#E91E63",  # 粉色
+    "#8BC34A",  # 浅绿色
+    "#FF5722",  # 深橙色
 ]
 
 class NoScrollComboBox(QComboBox):
-    """A QComboBox that ignores wheel events (scrolling) so parent widgets can scroll instead"""
+    """一个忽略滚轮事件 (滚动) 的 QComboBox，以便父级挂件可以代为滚动"""
     def wheelEvent(self, event):
         event.ignore()
 
 class CollapsibleSection(QWidget):
-    """A collapsible section widget with a header that can be clicked to expand/collapse"""
+    """一个可折叠的分段挂件，具有可以点击以展开/折叠的页眉"""
     def __init__(self, title="Section", parent=None):
         super().__init__(parent)
         self.is_collapsed = False
         
-        # Main layout
+        # 主布局
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         
-        # Header button
+        # 页眉按钮
         self.toggle_button = QPushButton(f"▼ {title}")
         self.toggle_button.setStyleSheet("""
             QPushButton {
@@ -189,7 +189,7 @@ class CollapsibleSection(QWidget):
         self.toggle_button.clicked.connect(self.toggle)
         self.main_layout.addWidget(self.toggle_button)
         
-        # Content area
+        # 内容区域
         self.content_widget = QWidget()
         self.content_layout = QVBoxLayout(self.content_widget)
         self.content_layout.setContentsMargins(5, 5, 5, 5)
@@ -198,13 +198,13 @@ class CollapsibleSection(QWidget):
     def toggle(self):
         self.is_collapsed = not self.is_collapsed
         self.content_widget.setVisible(not self.is_collapsed)
-        # Update arrow
-        title = self.toggle_button.text()[2:]  # Remove arrow
+        # 更新箭头
+        title = self.toggle_button.text()[2:]  # 移除箭头
         arrow = "▶" if self.is_collapsed else "▼"
         self.toggle_button.setText(f"{arrow} {title}")
     
     def set_content(self, widget):
-        # Clear existing content
+        # 清除现有内容
         while self.content_layout.count():
             child = self.content_layout.takeAt(0)
             if child.widget():

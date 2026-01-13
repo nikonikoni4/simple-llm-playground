@@ -2,14 +2,14 @@ from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QTextBrowser
 from utils import CollapsibleSection
 
 class NodeContextPanel(QGroupBox):
-    """Panel to display node thread context information"""
+    """用于显示节点线程上下文信息的面板"""
     def __init__(self):
         super().__init__("Node Context")
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(10, 15, 10, 10)
         self.main_layout.setSpacing(8)
         
-        # Context Messages Section
+        # 上下文消息部分
         self.context_section = CollapsibleSection("Context Information")
         self.context_browser = QTextBrowser()
         self.context_browser.setMinimumHeight(200)
@@ -18,7 +18,7 @@ class NodeContextPanel(QGroupBox):
         self.context_section.set_content(self.context_browser)
         self.main_layout.addWidget(self.context_section)
         
-        # LLM Input Prompt Section
+        # LLM 输入提示词部分
         self.prompt_section = CollapsibleSection("LLM Input Prompt")
         self.prompt_browser = QTextBrowser()
         self.prompt_browser.setMinimumHeight(300)
@@ -27,7 +27,7 @@ class NodeContextPanel(QGroupBox):
         self.prompt_section.set_content(self.prompt_browser)
         self.main_layout.addWidget(self.prompt_section)
         
-        # Node Output Section
+        # 节点输出部分
         self.output_section = CollapsibleSection("Node Output")
         self.output_browser = QTextBrowser()
         self.output_browser.setMinimumHeight(300)
@@ -36,20 +36,20 @@ class NodeContextPanel(QGroupBox):
         self.output_section.set_content(self.output_browser)
         self.main_layout.addWidget(self.output_section)
         
-        # Add stretch to push sections to top
+        # 添加拉伸量以将各部分推向顶部
         self.main_layout.addStretch()
         
         self.setLayout(self.main_layout)
     
     def load_node_context(self, node_data):
-        """Load and display context information for a node"""
-        # For now, just display placeholder text
-        # In the future, this will be populated with actual execution data
+        """加载并显示节点的上下文信息"""
+        # 目前仅显示占位文本
+        # 未来将填充真实的执行数据
         
         node_name = node_data.get("node_name", "Unknown")
         thread_id = node_data.get("thread_id", "main")
         
-        # Context info
+        # 上下文信息
         context_html = f"""
         <b>Node:</b> {node_name}<br>
         <b>Thread ID:</b> {thread_id}<br>
@@ -59,38 +59,38 @@ class NodeContextPanel(QGroupBox):
         """
         self.context_browser.setHtml(context_html)
         
-        # Prompt info
+        # 提示词信息
         prompt_html = f"""
         <i>LLM input prompt will appear here during execution</i>
         """
         self.prompt_browser.setHtml(prompt_html)
         
-        # Output info
+        # 输出信息
         output_html = f"""
         <i>Node output will appear here after execution</i>
         """
         self.output_browser.setHtml(output_html)
     
     def clear_context(self):
-        """Clear all context information"""
+        """清除所有上下文信息"""
         self.context_browser.clear()
         self.prompt_browser.clear()
         self.output_browser.clear()
     
     def load_node_context_from_api(self, context_data: dict):
         """
-        Load and display context information from API response
+        从 API 响应中加载并显示上下文信息
         
-        Args:
-            context_data: Dict containing node_id, node_name, thread_id,
+        参数:
+            context_data: 包含 node_id, node_name, thread_id,
                          thread_messages_before, thread_messages_after,
-                         llm_input, llm_output, tool_calls, data_out_content
+                         llm_input, llm_output, tool_calls, data_out_content 的字典
         """
         node_name = context_data.get("node_name", "Unknown")
         node_id = context_data.get("node_id", "?")
         thread_id = context_data.get("thread_id", "main")
         
-        # Format context messages
+        # 格式化上下文消息
         messages_before = context_data.get("thread_messages_before", [])
         messages_after = context_data.get("thread_messages_after", [])
         
@@ -114,7 +114,7 @@ class NodeContextPanel(QGroupBox):
         context_html += "</div>"
         self.context_browser.setHtml(context_html)
         
-        # LLM Input Prompt
+        # LLM 输入提示词
         llm_input = context_data.get("llm_input", "")
         prompt_html = f"""
         <div style="background-color: #2d2d2d; padding: 8px; border-radius: 4px; white-space: pre-wrap;">
@@ -123,7 +123,7 @@ class NodeContextPanel(QGroupBox):
         """
         self.prompt_browser.setHtml(prompt_html)
         
-        # Node Output (LLM output + tool calls)
+        # 节点输出 (LLM 输出 + 工具调用)
         llm_output = context_data.get("llm_output", "")
         tool_calls = context_data.get("tool_calls", [])
         data_out = context_data.get("data_out_content")

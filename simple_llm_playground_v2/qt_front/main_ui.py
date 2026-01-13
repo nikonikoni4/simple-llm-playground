@@ -3,15 +3,15 @@ import json
 import requests
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QHBoxLayout, 
                              QAction, QFileDialog, QSplitter)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
-# Local Imports
+# 本地导入
 from utils import DARK_STYLESHEET
 from context_panel import NodeContextPanel
 from graph import NodeGraphView
 from node_properties import NodePropertyEditor
 
-# App Configuration
+# 应用配置
 try:
     from config import BACKEND_PORT
 except ImportError:
@@ -20,17 +20,38 @@ except ImportError:
     except ImportError:
         BACKEND_PORT = 8001
 
-# Logic/Backend Imports
+# 逻辑/后端导入
 try:
     from llm_linear_executor.schemas import ALL_NODE_TYPES, ExecutionPlan, NodeDefinition
     from llm_linear_executor.os_plan import load_plan_from_dict, save_plan_to_template
 except ImportError:
-    # Fallback/Mock if imports fail (e.g. running outside of structure)
+    # 如果导入失败，则使用回退/模拟 (例如在结构之外运行)
     ALL_NODE_TYPES = []
     class ExecutionPlan: pass
     class NodeDefinition: pass
     def load_plan_from_dict(*args): return None
     def save_plan_to_template(*args): return None
+
+
+class ContextLoaderThread(QThread):
+    contextLoaded = pyqtSignal(dict)
+    
+    def __init__(self, port, run_id, node_id):
+        super().__init__()
+        self.port = port
+        self.run_id = run_id
+        self.node_id = node_id
+        
+    def run(self):
+        try:
+            url = f"http://localhost:{self.port}/api/context/{self.run_id}/{self.node_id}"
+            # 超时时间较短，以避免线程滞留，但对于本地后端来说足够了
+            resp = requests.get(url, timeout=1.0) 
+            if resp.status_code == 200:
+                self.contextLoaded.emit(resp.json())
+        except Exception:
+            # 静默失败或干脆不发送信号轮廓
+            pass
 
 
 class MainWindow(QMainWindow):
@@ -39,14 +60,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Simple LLM Playground")
         self.resize(1600, 1000)
         
-        # Central Widget
+        # 中心组件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Toolbar
+        # 工具栏
         toolbar = self.addToolBar("Main")
         
         load_action = QAction("Load JSON Plan", self)
@@ -57,52 +78,52 @@ class MainWindow(QMainWindow):
         save_action.triggered.connect(self.save_plan)
         toolbar.addAction(save_action)
         
-        # Main Splitter (Horizontal logic)
+        # 主分割器 (水平逻辑)
         main_h_splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(main_h_splitter)
         
-        # --- Left Panel: Context & Exec Info ---
+        # --- 左侧面板: 上下文及执行信息 ---
         self.context_panel = NodeContextPanel()
         main_h_splitter.addWidget(self.context_panel)
         
-        # --- Right Side: Vertical Splitter for Graph and Properties ---
+        # --- 右侧: 用于图表和属性的垂直分割器 ---
         right_v_splitter = QSplitter(Qt.Vertical)
         main_h_splitter.addWidget(right_v_splitter)
         
-        # --- Top Right: Graph View ---
+        # --- 右上: 图形视图 ---
         self.graph_view = NodeGraphView()
         right_v_splitter.addWidget(self.graph_view)
         
-        # --- Bottom Right: Properties ---
+        # --- 右下: 属性 ---
         self.prop_editor = NodePropertyEditor()
         right_v_splitter.addWidget(self.prop_editor)
         
-        # Set splitter sizes
-        # Left panel ~30% width, Right side ~70%
+        # 设置分割器大小
+        # 左面板约 30% 宽度，右侧约 70%
         main_h_splitter.setSizes([450, 1150])
-        # Top (Graph) ~60% height, Bottom (Properties) ~40%
+        # 顶部 (图表) 约 60% 高度，底部 (属性) 约 40%
         right_v_splitter.setSizes([600, 400])
         
-        # Connect Signals
+        # 连接信号
         self.graph_view.nodeSelected.connect(self.on_node_selected)
         
-        # Connect manual save button AND auto-save updates
+        # 连接手动保存按钮以及自动保存更新
         self.prop_editor.nodeDataChanged.connect(self.on_node_data_changed)
         
-        # Connect branch change signal to update node color
-        self.prop_editor.branchChanged.connect(self.on_branch_changed) # NEW connection
+        # 连接分支更改信号以更新节点颜色
+        self.prop_editor.branchChanged.connect(self.on_branch_changed)
         
-        # Initial State
+        # 初始状态轮廓
         self.current_file_path = None
 
     def on_node_selected(self, node_data):
-        # 1. Load data into Property Editor
-        # Determine if this node is first in its thread
-        # Find all nodes in this thread, check if this node has lowest ID
+        # 1. 将数据加载到属性编辑器中
+        # 确定该节点是否为其线程中的第一个节点
+        # 查找该线程中的所有节点，检查该节点是否具有最低 ID
         thread_id = node_data.get("thread_id", "main")
         current_id = node_data.get("id")
         
-        # Get all nodes from graph scene to check IDs
+        # 从图表场景获取所有节点以检查 ID
         all_nodes = self.graph_view.get_all_nodes_data()
         thread_nodes = [n for n in all_nodes if n.get("thread_id") == thread_id]
         
@@ -110,33 +131,39 @@ class MainWindow(QMainWindow):
              min_id = min(n.get("id", 999999) for n in thread_nodes)
              is_first = (current_id == min_id)
         else:
-             is_first = True # Should be unique if it's the only one found?
+             is_first = True # 如果只找到这一个，那它应该是唯一的？
              
         self.prop_editor.load_node(node_data, is_first_in_thread=is_first)
         
-        # 2. Load Context from API
-        # Only if we have execution context/logs? 
-        # For now, just clear or load mock
+        # 2. 从 API 加载上下文 (异步)
+        # 首先清除/加载占位符
         self.context_panel.load_node_context(node_data)
         
-        # Try fetch context from backend
-        run_id = "run1" # TODO: Make dynamic
-        try:
-             url = f"http://localhost:{BACKEND_PORT}/api/context/{run_id}/{node_data['id']}"
-             resp = requests.get(url, timeout=0.5)
-             if resp.status_code == 200:
-                 self.context_panel.load_node_context_from_api(resp.json())
-             else:
-                 self.context_panel.clear_context()
-        except:
-             self.context_panel.clear_context()
+        # 如果之前的加载器处于活动状态，则取消/断开连接
+        if hasattr(self, 'ctx_loader') and self.ctx_loader is not None:
+            if self.ctx_loader.isRunning():
+                # 断开信号以忽略之前选择的结果
+                try: 
+                    self.ctx_loader.contextLoaded.disconnect() 
+                except TypeError: 
+                    pass # 尚未连接
+            self.ctx_loader = None
+
+        # 尝试在后台从后端获取上下文
+        run_id = "run1" # TODO: 使其动态化
+        
+        self.ctx_loader = ContextLoaderThread(BACKEND_PORT, run_id, node_data['id'])
+        self.ctx_loader.contextLoaded.connect(self.context_panel.load_node_context_from_api)
+        self.ctx_loader.start()
+
+
 
     def on_node_data_changed(self):
-        # Update connections in graph view if data changed affecting them (like thread_id)
+        # 如果数据更改影响了连接（如 thread_id），则更新图性格视图中的连接
         self.graph_view.update_connections()
         
     def on_branch_changed(self, node_data):
-        """Handle branch (thread_id) change to update node color"""
+        """处理分支 (thread_id) 更改以更新节点颜色"""
         self.graph_view.update_node_color(node_data)
 
     def load_plan(self):
@@ -146,7 +173,7 @@ class MainWindow(QMainWindow):
                 with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 
-                # Check format (List or Dict with 'nodes')
+                # 检查格式 (列表或带有 'nodes' 的字典)
                 nodes = []
                 if isinstance(data, list):
                     nodes = data
@@ -165,14 +192,14 @@ class MainWindow(QMainWindow):
             try:
                 nodes = self.graph_view.get_all_nodes_data()
                 
-                # Clean up UI-specific fields before saving? 
-                # Or keep them for layout persistence.
-                # If we want clean export:
+                # 在保存前清理 UI 特有的字段？
+                # 或者为布局持久化保留它们。
+                # 如果我们要干净地导出:
                 clean_nodes = []
                 for n in nodes:
                     n_copy = n.copy()
-                    # Remove internal UI flags if any (like _ui_pos if not wanted)
-                    # But we usually want _ui_pos if we support drag persistence.
+                    # 如果不需要，移除内部 UI 标志 (如 _ui_pos)
+                    # 但如果我们支持拖拽持久化，通常想要保留 _ui_pos。
                     clean_nodes.append(n_copy)
                 
                 with open(path, "w", encoding="utf-8") as f:
