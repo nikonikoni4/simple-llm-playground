@@ -757,29 +757,31 @@ class NodeGraphView(QGraphicsView):
                 break
 
     def add_node(self, node_data: NodeProperties):
-        # 依据 node_id 和 thread_view_index 计算坐标
+        # 坐标由 schemas.py 中的 __setattr__ 自动计算
+        # 当 node_id 或 thread_view_index 被设置时会自动更新 x, y
         node_id = node_data.node_id
         tidx = node_data.thread_view_index
         
         if tidx is None:
             # Fallback (should not happen with new principles)
              tidx = 0
-             node_data.thread_view_index = 0
+             node_data.thread_view_index = 0  # 这会自动触发 y 坐标计算
 
-        # ID 1 -> 0, ID 2 -> GAP ...
-        calculated_x = (node_id - 1) * self.node_gap_x
-        
-        # 索引大 = 更靠上 = Y 值更小
-        calculated_y = self.main_y_baseline - (tidx * self.thread_gap_y)
-        
-        # 直接修改 node_data 的坐标
-        node_data.x = calculated_x
-        node_data.y = calculated_y
+        # [已注释 - 坐标由 schemas.py 自动计算]
+        # # ID 1 -> 0, ID 2 -> GAP ...
+        # calculated_x = (node_id - 1) * self.node_gap_x
+        # 
+        # # 索引大 = 更靠上 = Y 值更小
+        # calculated_y = self.main_y_baseline - (tidx * self.thread_gap_y)
+        # 
+        # # 直接修改 node_data 的坐标
+        # node_data.x = calculated_x
+        # node_data.y = calculated_y
         
         # 获取线程颜色
         thread_color = self.get_thread_color(node_data.thread_id)
         
-        # 创建节点项，坐标从 node_data 中读取
+        # 创建节点项，坐标从 node_data 中读取（由 __setattr__ 自动计算）
         item = NodeItem(node_data, thread_color=thread_color)
         self.scene.addItem(item)
         
@@ -965,9 +967,10 @@ class NodeGraphView(QGraphicsView):
             node_id = node.node_data.node_id
             if node_id > deleted_id:
                 new_id = node_id - 1
-                node.node_data.node_id = new_id
-                # 根据新 ID 重新计算 X 位置
-                node.setPos((new_id - 1) * self.node_gap_x, node.y())
+                node.node_data.node_id = new_id  # 这会自动触发 x 坐标计算
+                # [已注释 - 坐标由 schemas.py 自动计算]
+                # node.setPos((new_id - 1) * self.node_gap_x, node.y())
+                node.setPos(node.node_data.x, node.node_data.y)  # 使用自动计算的坐标
         
         # 递减 next_node_id 计数器
         self.next_node_id = max(1, self.next_node_id - 1)
@@ -1011,9 +1014,10 @@ class NodeGraphView(QGraphicsView):
             tid = node.node_data.thread_id
             if tid in self.thread_view_indices:
                 new_idx = self.thread_view_indices[tid]
-                node.node_data.thread_view_index= new_idx
-                # 重新计算 Y (索引越大 = 越靠上 = 负偏移)
-                node.setPos(node.x(), self.main_y_baseline - (new_idx * 120))
+                node.node_data.thread_view_index = new_idx  # 这会自动触发 y 坐标计算
+                # [已注释 - 坐标由 schemas.py 自动计算]
+                # node.setPos(node.x(), self.main_y_baseline - (new_idx * 120))
+                node.setPos(node.node_data.x, node.node_data.y)  # 使用自动计算的坐标
         
         self.update_connections()
 
@@ -1056,22 +1060,19 @@ class NodeGraphView(QGraphicsView):
         if not target_node:
             print(f"Cannot swap: no node found with ID {target_id}")
             return
-        # 暂存current_node 的 坐标
-        temp_x = item.node_data.x
+        # [已注释 - 坐标由 schemas.py 自动计算，不再需要手动交换坐标]
+        # # 暂存current_node 的 坐标
+        # temp_x = item.node_data.x
+        # # current_node 的坐标设置为 target_node 的坐标
+        # item.node_data.x = target_node.node_data.x
+        # # target_node 的坐标设置为 temp_x
+        # target_node.node_data.x = temp_x
 
-
-        # current_node 的坐标设置为 target_node 的坐标
-        item.node_data.x = target_node.node_data.x
-
-
-        # target_node 的坐标设置为 temp_x
-        target_node.node_data.x = temp_x
-
-        # 交换 ID
+        # 交换 ID (这会自动触发 x 坐标计算)
         item.node_data.node_id = target_id
         target_node.node_data.node_id = current_id
 
-        # 根据新 ID 重新计算位置
+        # 根据自动计算的坐标更新位置
         item.setPos(item.node_data.x, item.node_data.y)
         target_node.setPos(target_node.node_data.x, target_node.node_data.y)
         
@@ -1123,20 +1124,20 @@ class NodeGraphView(QGraphicsView):
         for node in nodes:
             node_thread_id = node.node_data.thread_id
             if node_thread_id == current_thread_id:
-                # 为当前线程中的所有节点更新 thread_view_index
+                # 为当前线程中的所有节点更新 thread_view_index (这会自动触发 y 坐标计算)
                 node.node_data.thread_view_index = target_thread_index
-                # 重新计算 Y 位置轮廓
-                new_y = self.main_y_baseline - (target_thread_index * self.thread_gap_y)
-                node.setPos(node.x(), new_y)
-
+                # [已注释 - 坐标由 schemas.py 自动计算]
+                # new_y = self.main_y_baseline - (target_thread_index * self.thread_gap_y)
+                # node.setPos(node.x(), new_y)
+                node.setPos(node.node_data.x, node.node_data.y)  # 使用自动计算的坐标
                 node.update()
             elif node_thread_id == target_thread_id:
-                # 为目标线程中的所有节点更新 thread_view_index轮廓
+                # 为目标线程中的所有节点更新 thread_view_index (这会自动触发 y 坐标计算)
                 node.node_data.thread_view_index = current_thread_index
-                # 重新计算 Y 位置轮廓
-                new_y = self.main_y_baseline - (current_thread_index * self.thread_gap_y)
-                node.setPos(node.x(), new_y)
-
+                # [已注释 - 坐标由 schemas.py 自动计算]
+                # new_y = self.main_y_baseline - (current_thread_index * self.thread_gap_y)
+                # node.setPos(node.x(), new_y)
+                node.setPos(node.node_data.x, node.node_data.y)  # 使用自动计算的坐标
                 node.update()
         
         # 更新所有连接线轮廓

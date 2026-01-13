@@ -28,6 +28,21 @@ class NodeProperties(NodeDefinition):
     x: int = Field(default=0, description="UI X坐标")
     y: int = Field(default=0, description="UI Y坐标")
 
+    @model_validator(mode='after')
+    def _init_coords(self) -> 'NodeProperties':
+        # 初始化时自动计算坐标 (解决 __setattr__ 在 init 时不执行的问题)
+        # 仅当坐标为默认值(0)时才进行计算，避免覆盖从文件加载的已保存坐标
+        
+        if self.x == 0 and self.node_id > 0:
+            self.x = (self.node_id - 1) * NODE_GAP_X
+            
+        expected_y = MAIN_Y_BASELINE - (self.thread_view_index * THREAD_GAP_Y)
+        # 如果当前 y 为 0 (默认)，但根据 thread 应为其他值，则更新
+        if self.y == 0 and expected_y != 0:
+            self.y = expected_y
+            
+        return self
+
 
     # 修改_setattr_方法，实现坐标的自动更新
     def __setattr__(self, name, value):
@@ -107,13 +122,9 @@ class GuiExecutionPlan(ExecutionPlan):
             
             node.thread_view_index = self.thread_view_indices[tid]
             
-            # 3. 计算 x 坐标 (如果当前为默认值0，才重新计算)
-            if node.x == 0:
-                node.x = node.node_id * NODE_GAP_X
-            
-            # 4. 计算 y 坐标 (如果当前为默认值0，才重新计算)
-            if node.y == 0:
-                node.y = MAIN_Y_BASELINE - (node.thread_view_index * THREAD_GAP_Y)
+            # [已移除] x, y 坐标由 NodeProperties.__setattr__ 自动计算
+            # 当 node_id 被设置时自动计算 x = (node_id - 1) * NODE_GAP_X
+            # 当 thread_view_index 被设置时自动计算 y = MAIN_Y_BASELINE - (thread_view_index * THREAD_GAP_Y)
         
         return self
         
