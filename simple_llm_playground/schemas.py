@@ -28,6 +28,19 @@ class NodeProperties(NodeDefinition):
     x: int = Field(default=0, description="UI X坐标")
     y: int = Field(default=0, description="UI Y坐标")
 
+
+    # 修改_setattr_方法，实现坐标的自动更新
+    def __setattr__(self, name, value):
+        # 1. 首先执行标准的赋值逻辑（让 Pydantic 把值存进去）
+        super().__setattr__(name, value)
+        
+        # 2. 判断是否是我们在意的字段被修改了
+        if name == 'node_id':
+            self.x = (self.node_id-1) * NODE_GAP_X
+        elif name == 'thread_view_index':
+            self.y = MAIN_Y_BASELINE - (self.thread_view_index * THREAD_GAP_Y)
+        
+
 class GuiExecutionPlan(ExecutionPlan):
     """
     前端专用执行计划
