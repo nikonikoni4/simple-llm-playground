@@ -10,9 +10,10 @@ class NodeItem(QGraphicsItem):
     """
     自定义节点项，具有圆角、页眉和阴影。
     """
-    def __init__(self, node_data: NodeProperties, x=0, y=0, w=180, h=80, thread_color=None):
+    def __init__(self, node_data: NodeProperties, w=180, h=80, thread_color=None):
         super().__init__()
-        self.setPos(x, y)
+        # 直接从 node_data 中读取坐标
+        self.setPos(node_data.x, node_data.y)
         self.width = w
         self.height = h
         self.node_data: NodeProperties = node_data
@@ -765,9 +766,9 @@ class NodeGraphView(QGraphicsView):
         # 查找匹配数据的节点项
         nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in nodes:
-            if node.node_data.get("id") == node_data.get("id"):
+            if node.node_data.node_id == node_data.node_id:
                 # 获取新线程颜色
-                thread_id = node_data.get("thread_id", "main")
+                thread_id = node_data.thread_id
                 new_color = self.get_thread_color(thread_id)
                 node.thread_color = new_color
                 # 强制重绘
@@ -787,11 +788,11 @@ class NodeGraphView(QGraphicsView):
         """
         nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in nodes:
-            if node.node_data.get("id") == node_id:
+            if node.node_data.node_id == node_id:
                 node.set_execution_status(status)
                 break
 
-    def add_node(self, node_data, x, y, force_id=None):
+    def add_node(self, node_data: NodeProperties, x, y, force_id=None):
         # 强制 ID
         if force_id is not None:
             node_id = force_id
@@ -805,18 +806,18 @@ class NodeGraphView(QGraphicsView):
             node_id = self.next_node_id
             self.next_node_id += 1
         
-        node_data["id"] = node_id
+        node_data.node_id = node_id
         
         # 确保 thread_id 存在
         if "thread_id" not in node_data:
-            node_data["thread_id"] = "main"
+            node_data.thread_id = "main"
             
         # 确保 thread_view_index 存在
-        tid = node_data["thread_id"]
+        tid = node_data.thread_id
 
         if "thread_view_index" not in node_data:
             if tid in self.thread_view_indices:
-                node_data["thread_view_index"] = self.thread_view_indices[tid]
+                node_data.thread_view_index = self.thread_view_indices[tid]
             else:
                 # 新线程动态分配
                 # 警告: 除非确实是一个新线程，否则添加简单节点通常不应创建新的线程索引。
@@ -824,12 +825,12 @@ class NodeGraphView(QGraphicsView):
                 current_indices = self.thread_view_indices.values()
                 next_idx = max(current_indices) + 1 if current_indices else 0
                 self.thread_view_indices[tid] = next_idx
-                node_data["thread_view_index"] = next_idx
+                node_data.thread_view_index = next_idx
 
         else:
              # 如果管理器中不存在，则同步回去
              if tid not in self.thread_view_indices:
-                 self.thread_view_indices[tid] = node_data["thread_view_index"]
+                 self.thread_view_indices[tid] = node_data.thread_view_index
 
 
         # 基于 ID 强制 X 坐标
@@ -840,19 +841,19 @@ class NodeGraphView(QGraphicsView):
         
         # 基于 thread_view_index 强制 Y 坐标
         thread_gap_y = 120
-        tidx = node_data["thread_view_index"]
+        tidx = node_data.thread_view_index
         # 索引大 = 更靠上 = Y 值更小
         calculated_y = self.main_y_baseline - (tidx * thread_gap_y)
         
-        # 忽略传递的 'y' 参数，转而使用严格的线程布局？
-        # 'y' 参数通常由 parent.y() - 120 等计算得出。
-        # 我们应使用严格的计算方式。
-        y = calculated_y
+        # 直接修改 node_data 的坐标
+        node_data.x = calculated_x
+        node_data.y = calculated_y
         
         # 获取线程颜色
-        thread_color = self.get_thread_color(node_data["thread_id"])
+        thread_color = self.get_thread_color(node_data.thread_id)
         
-        item = NodeItem(node_data, calculated_x, y, thread_color=thread_color)
+        # 创建节点项，坐标从 node_data 中读取
+        item = NodeItem(node_data, thread_color=thread_color)
         self.scene.addItem(item)
     
     def wheelEvent(self, event: QWheelEvent):
@@ -938,8 +939,8 @@ class NodeGraphView(QGraphicsView):
                 if source_id < target_id:
                     # 创建 data_in 连接
                     source_thread = self.drag_start_item.node_data.get("thread_id", "main")
-                    target.node_data["data_in_thread"] = source_thread
-                    target.node_data["data_in_slice"] = (-1, None)  # 默认: 最后一条消息
+                    target.node_data.data_in_thread = source_thread
+                    target.node_data.data_in_slice = (-1, None)  # 默认: 最后一条消息
                     print(f"Created connection: {source_thread} -> Node {target_id}")
                     self.update_connections()
                 else:
@@ -1021,16 +1022,16 @@ class NodeGraphView(QGraphicsView):
         self.update_connections()
 
     def delete_node(self, item):
-        deleted_id = item.node_data.get("id", 0)
+        deleted_id = item.node_data.node_id
         self.scene.removeItem(item)
         
         # 重新对 ID > deleted_id 的所有节点进行编号
         nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in nodes:
-            node_id = node.node_data.get("id", 0)
+            node_id = node.node_data.node_id
             if node_id > deleted_id:
                 new_id = node_id - 1
-                node.node_data["id"] = new_id
+                node.node_data.node_id = new_id
                 # 根据新 ID 重新计算 X 位置
                 node.setPos((new_id - 1) * self.node_gap_x, node.y())
         
@@ -1076,7 +1077,7 @@ class NodeGraphView(QGraphicsView):
             tid = node.node_data.get("thread_id", "main")
             if tid in self.thread_view_indices:
                 new_idx = self.thread_view_indices[tid]
-                node.node_data["thread_view_index"] = new_idx
+                node.node_data.thread_view_index= new_idx
                 # 重新计算 Y (索引越大 = 越靠上 = 负偏移)
                 node.setPos(node.x(), self.main_y_baseline - (new_idx * 120))
         
@@ -1123,8 +1124,8 @@ class NodeGraphView(QGraphicsView):
             return
         
         # 交换 ID
-        item.node_data["id"] = target_id
-        target_node.node_data["id"] = current_id
+        item.node_data.node_id = target_id
+        target_node.node_data.node_id = current_id
         
         # 根据新 ID 重新计算位置
         item.setPos((target_id - 1) * self.node_gap_x, item.y())
@@ -1180,7 +1181,7 @@ class NodeGraphView(QGraphicsView):
             node_thread_id = node.node_data.get("thread_id", "main")
             if node_thread_id == current_thread_id:
                 # 为当前线程中的所有节点更新 thread_view_index
-                node.node_data["thread_view_index"] = target_thread_index
+                node.node_data.thread_view_index = target_thread_index
                 # 重新计算 Y 位置轮廓
                 new_y = self.main_y_baseline - (target_thread_index * thread_gap_y)
                 node.setPos(node.x(), new_y)
@@ -1188,7 +1189,7 @@ class NodeGraphView(QGraphicsView):
                 node.update()
             elif node_thread_id == target_thread_id:
                 # 为目标线程中的所有节点更新 thread_view_index轮廓
-                node.node_data["thread_view_index"] = current_thread_index
+                node.node_data.thread_view_index = current_thread_index
                 # 重新计算 Y 位置轮廓
                 new_y = self.main_y_baseline - (current_thread_index * thread_gap_y)
                 node.setPos(node.x(), new_y)
