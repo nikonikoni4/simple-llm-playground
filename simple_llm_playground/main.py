@@ -219,7 +219,7 @@ if __name__ == "__main__":
     import uvicorn
     from simple_llm_playground.server.backend_api import app
     from simple_llm_playground.server.executor_manager import executor_manager
-    import config
+    from simple_llm_playground import config
     # 1. 设置 LLM 工厂
     setup_llm_factory()
 

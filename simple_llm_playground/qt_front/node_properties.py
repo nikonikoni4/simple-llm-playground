@@ -2,28 +2,14 @@ from PyQt5.QtWidgets import (QGroupBox, QVBoxLayout, QWidget, QHBoxLayout, QForm
                              QLineEdit, QComboBox, QTextEdit, QCheckBox, QLabel, QFrame, 
                              QSpinBox, QScrollArea, QTabWidget, QPushButton, QDoubleSpinBox)
 from PyQt5.QtCore import pyqtSignal
-try:
-    from .utils import NoScrollComboBox
-except ImportError:
-    from utils import NoScrollComboBox
+from simple_llm_playground.qt_front.utils import NoScrollComboBox
 import json
 
 # 配置导入
-try:
-    from config import BACKEND_PORT
-except ImportError:
-    try:
-        from ..config import BACKEND_PORT
-    except ImportError:
-        BACKEND_PORT = 8001
+from simple_llm_playground.config import BACKEND_PORT
 
 # Schema 导入
-try:
-    from ..schemas import ALL_NODE_TYPES, NodeProperties
-except ImportError:
-    # 如果直接导入失败，则使用回退/模拟 (仅开发调试用)
-    ALL_NODE_TYPES = ["llm-first", "tool-first"]
-    NodeProperties = None
+from simple_llm_playground.schemas import ALL_NODE_TYPES, NodeProperties
 
 
 class NodePropertyEditor(QGroupBox):

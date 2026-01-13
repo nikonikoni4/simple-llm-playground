@@ -4,11 +4,11 @@
 import sys
 import os
 
-# 确保可以找到兄弟包
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+# 确保可以找到兄弟包 (Removed: Package installed)
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# parent_dir = os.path.dirname(current_dir)
+# if parent_dir not in sys.path:
+#     sys.path.insert(0, parent_dir)
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QFont
 
-from .api_client import ExecutorController, APIError
+from simple_llm_playground.qt_front.api_client import ExecutorController, APIError
 
 
 class ExecutionControlPanel(QWidget):

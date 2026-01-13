@@ -6,37 +6,18 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QH
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
 # 本地导入
-from utils import DARK_STYLESHEET
-from context_panel import NodeContextPanel
-from graph import NodeGraphView
-from node_properties import NodePropertyEditor
+# 本地导入
+from simple_llm_playground.qt_front.utils import DARK_STYLESHEET
+from simple_llm_playground.qt_front.context_panel import NodeContextPanel
+from simple_llm_playground.qt_front.graph import NodeGraphView
+from simple_llm_playground.qt_front.node_properties import NodePropertyEditor
 
 # 应用配置
-try:
-    from config import BACKEND_PORT
-except ImportError:
-    try:
-        from ..config import BACKEND_PORT
-    except ImportError:
-        BACKEND_PORT = 8001
+from simple_llm_playground.config import BACKEND_PORT
 
 # 逻辑/后端导入
-# 逻辑/后端导入
-try:
-    from ..schemas import ALL_NODE_TYPES, ExecutionPlan, NodeDefinition, GuiExecutionPlan
-    from llm_linear_executor.os_plan import load_plan_from_dict, save_plan_to_template
-except ImportError:
-    try:
-        from simple_llm_playground_v2.schemas import ALL_NODE_TYPES, ExecutionPlan, NodeDefinition, GuiExecutionPlan
-        from llm_linear_executor.os_plan import load_plan_from_dict, save_plan_to_template
-    except ImportError:
-        # 如果导入失败，则使用回退/模拟 (例如在结构之外运行)
-        ALL_NODE_TYPES = []
-        class ExecutionPlan: pass
-        class NodeDefinition: pass
-        class GuiExecutionPlan: pass
-        def load_plan_from_dict(*args): return None
-        def save_plan_to_template(*args): return None
+from simple_llm_playground.schemas import ALL_NODE_TYPES, ExecutionPlan, NodeDefinition, GuiExecutionPlan
+from llm_linear_executor.os_plan import load_plan_from_dict, save_plan_to_template
 
 
 

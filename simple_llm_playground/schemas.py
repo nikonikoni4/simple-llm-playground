@@ -1,4 +1,4 @@
-from llm_linear_executor.llm_linear_executor.schemas import (
+from llm_linear_executor.schemas import (
     NodeType,
     ALL_NODE_TYPES,
     MAIN_EXECUTOR_PERMISSIONS,
@@ -10,6 +10,8 @@ from llm_linear_executor.llm_linear_executor.schemas import (
 from pydantic import Field
 from typing import Optional
 from pydantic import BaseModel
+
+ModelConfig = dict
 class NodeProperties(NodeDefinition):
     """前端节点属性扩展"""
     # 标识与索引

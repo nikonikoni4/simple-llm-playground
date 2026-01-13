@@ -3,13 +3,8 @@ import json
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 # 默认端口配置
-try:
-    from config import BACKEND_PORT
-except ImportError:
-    try:
-        from ..config import BACKEND_PORT
-    except ImportError:
-        BACKEND_PORT = 8001
+# 默认端口配置
+from simple_llm_playground.config import BACKEND_PORT
 
 class APIWorker(QThread):
     """
