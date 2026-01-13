@@ -1159,14 +1159,24 @@ class NodeGraphView(QGraphicsView):
         if not target_node:
             print(f"Cannot swap: no node found with ID {target_id}")
             return
-        
+        # 暂存current_node 的 坐标
+        temp_x = item.node_data.x
+
+
+        # current_node 的坐标设置为 target_node 的坐标
+        item.node_data.x = target_node.node_data.x
+
+
+        # target_node 的坐标设置为 temp_x
+        target_node.node_data.x = temp_x
+
         # 交换 ID
         item.node_data.node_id = target_id
         target_node.node_data.node_id = current_id
-        
+
         # 根据新 ID 重新计算位置
-        item.setPos((target_id - 1) * self.node_gap_x, item.y())
-        target_node.setPos((current_id - 1) * self.node_gap_x, target_node.y())
+        item.setPos(item.node_data.x, item.node_data.y)
+        target_node.setPos(target_node.node_data.x, target_node.node_data.y)
         
         # 强制重绘
         item.update()
