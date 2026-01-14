@@ -66,21 +66,21 @@ class MainWindow(QMainWindow):
         
         # 添加新 Pattern 的按钮
         self.add_pattern_btn = QPushButton("+")
-        self.add_pattern_btn.setFixedSize(28, 28)
+        self.add_pattern_btn.setFixedSize(32, 32)
         self.add_pattern_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2196F3;
+                background-color: #0d47a1;
                 color: white;
-                border-radius: 14px;
+                border-radius: 6px;
                 font-weight: bold;
                 font-size: 20px;
-                padding-bottom: 3px;
+                padding: 0px;
             }
             QPushButton:hover {
-                background-color: #42A5F5;
+                background-color: #1565c0;
             }
             QPushButton:pressed {
-                background-color: #1976D2;
+                background-color: #0a3d8f;
             }
         """)
         self.add_pattern_btn.clicked.connect(self.on_add_pattern_clicked)
@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         self.execution_panel.nodeStatesUpdated.connect(self._on_node_states_updated)
         self.execution_panel.executionError.connect(self._on_execution_error)
         self.execution_panel.saveRequested.connect(self._update_execution_plan)
+        self.execution_panel.toolsLoaded.connect(self.prop_editor.load_available_tools)
         
         # 上下文相关信号
         self.execution_panel.controller.contextLoaded.connect(self._on_context_loaded)
@@ -161,6 +162,9 @@ class MainWindow(QMainWindow):
         
         # 自动创建默认的 "custom" pattern
         self.graph_view.create_new_pattern("custom")
+        
+        # 从后端加载可用工具列表
+        self.execution_panel.load_tools()
 
 
     def _update_execution_plan(self):

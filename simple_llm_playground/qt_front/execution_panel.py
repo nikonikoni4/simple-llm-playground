@@ -37,6 +37,7 @@ class ExecutionControlPanel(QWidget):
     executionError = pyqtSignal(str)            # error message
     nodeStatesUpdated = pyqtSignal(list)        # node_states list
     saveRequested = pyqtSignal()                # Request to save current state
+    toolsLoaded = pyqtSignal(list)              # 工具列表加载完成信号
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -150,6 +151,29 @@ class ExecutionControlPanel(QWidget):
         self.controller.runCompleted.connect(self._on_run_completed)
         self.controller.runFailed.connect(self._on_run_failed)
         self.controller.statusUpdated.connect(self._on_status_updated)
+    
+    def load_tools(self):
+        """
+        从后端加载可用工具列表
+        
+        加载成功后会发出 toolsLoaded 信号
+        """
+        try:
+            import requests
+            from simple_llm_playground.config import BACKEND_PORT
+            
+            response = requests.get(f"http://localhost:{BACKEND_PORT}/api/tools", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                tools = data.get("tools", [])
+                print(f"Loaded {len(tools)} tools from backend")
+                self.toolsLoaded.emit(tools)
+            else:
+                print(f"Failed to load tools: HTTP {response.status_code}")
+                self.toolsLoaded.emit([])
+        except Exception as e:
+            print(f"Error loading tools: {e}")
+            self.toolsLoaded.emit([])
     
     def set_plan(self, plan_data: dict):
         """设置要执行的计划"""

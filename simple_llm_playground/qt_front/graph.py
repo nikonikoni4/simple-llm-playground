@@ -1310,15 +1310,13 @@ class NodeGraphView(QGraphicsView):
         
         try:
             # 构建保存格式：将所有 plans 合并到一个 JSON 中
-            # 格式: {"patterns": {"pattern1": {...}, "pattern2": {...}}}
+            # 格式: {"pattern1": {...}, "pattern2": {...}}
             all_data = {}
             for pattern_name, plan in self.all_plans.items():
                 all_data[pattern_name] = plan.model_dump(exclude_none=True)
             
-            output = {"patterns": all_data}
-            
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(output, f, indent=2, ensure_ascii=False)
+                json.dump(all_data, f, indent=2, ensure_ascii=False)
             
             self.current_file_path = path
             print(f"Saved {len(self.all_plans)} patterns to {path}")

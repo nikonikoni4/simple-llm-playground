@@ -275,8 +275,7 @@ class NodePropertyEditor(QGroupBox):
         self.enable_search_cb.stateChanged.connect(self._auto_save)
         self.enable_thinking_cb.stateChanged.connect(self._auto_save)
         
-        # 从后端加载可用工具
-        self.load_available_tools()
+        # 工具列表将由外部传入 (main_ui 通过 execution_panel 获取)
 
     def _get_node_val(self, key: str, default=None):
         """
@@ -315,67 +314,73 @@ class NodePropertyEditor(QGroupBox):
         if not self._loading_data and self.current_node_data is not None:
             self._save_to_node_data()
     
-    def load_available_tools(self):
-        """从后端 API 加载可用工具"""
-        try:
-            import requests
-            response = requests.get(f"http://localhost:{BACKEND_PORT}/api/tools", timeout=2)
-            if response.status_code == 200:
-                data = response.json()
-                tools = data.get("tools", [])
-                
-                # 清除现有项
-                self.tool_checkboxes = {}
-                while self.tools_container_layout.count():
-                    child = self.tools_container_layout.takeAt(0)
-                    if child.widget():
-                        child.widget().deleteLater()
-                
-                self.initial_tool_combo.clear()
-                self.initial_tool_combo.addItem("选择初始工具...")
-                
-                # 存储工具详情以备后用
-                self._available_tools = {}
-                self.tool_limit_spinboxes = {}
-                
-                for tool in tools:
-                    tool_name = tool.get("name", "")
-                    self._available_tools[tool_name] = tool
-                    
-                    # 添加到工具容器
-                    row_widget = QWidget()
-                    row_layout = QHBoxLayout(row_widget)
-                    row_layout.setContentsMargins(0, 0, 0, 0)
-                    
-                    cb = QCheckBox(tool_name)
-                    cb.stateChanged.connect(self._on_tools_list_changed)
-                    
-                    limit_spin = QSpinBox()
-                    limit_spin.setRange(0, 999)
-                    limit_spin.setSpecialValueText("默认")
-                    limit_spin.setPrefix("限制: ")
-                    limit_spin.setToolTip("此工具的最大调用次数 (0 = 执行器默认值)")
-                    limit_spin.setFixedWidth(120)
-                    limit_spin.valueChanged.connect(self._auto_save)
-                    
-                    row_layout.addWidget(cb)
-                    row_layout.addStretch()
-                    row_layout.addWidget(limit_spin)
-                    
-                    self.tools_container_layout.addWidget(row_widget)
-                    self.tool_checkboxes[tool_name] = cb
-                    self.tool_limit_spinboxes[tool_name] = limit_spin
-                    
-                    # 添加到初始工具下拉菜单
-                    self.initial_tool_combo.addItem(tool_name)
-                    
-                print(f"Loaded {len(tools)} tools from backend")
-            else:
-                print(f"Failed to load tools: HTTP {response.status_code}")
-        except Exception as e:
-            print(f"Error loading tools: {e}")
-            # 如果加载失败，则初始化为空字典
+    def load_available_tools(self, tools: list = None):
+        """
+        加载可用工具到 UI
+        
+        Args:
+            tools: 工具信息列表，每个工具应包含 name, description, parameters 字段
+                   如果为 None，则清空工具列表
+        """
+        # 清除现有项
+        self.tool_checkboxes = {}
+        while self.tools_container_layout.count():
+            child = self.tools_container_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        self.initial_tool_combo.clear()
+        self.initial_tool_combo.addItem("选择初始工具...")
+        
+        # 如果没有工具数据，初始化为空
+        if not tools:
             self._available_tools = {}
+            self.tool_limit_spinboxes = {}
+            return
+        
+        # 存储工具详情以备后用
+        self._available_tools = {}
+        self.tool_limit_spinboxes = {}
+        
+        for tool in tools:
+            # 支持 dict 和 Pydantic 对象
+            if hasattr(tool, 'name'):
+                tool_name = tool.name
+                tool_dict = tool.model_dump() if hasattr(tool, 'model_dump') else {'name': tool_name}
+            else:
+                tool_name = tool.get("name", "")
+                tool_dict = tool
+            
+            self._available_tools[tool_name] = tool_dict
+            
+            # 添加到工具容器
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            
+            cb = QCheckBox(tool_name)
+            cb.stateChanged.connect(self._on_tools_list_changed)
+            
+            limit_spin = QSpinBox()
+            limit_spin.setRange(0, 999)
+            limit_spin.setSpecialValueText("默认")
+            limit_spin.setPrefix("限制: ")
+            limit_spin.setToolTip("此工具的最大调用次数 (0 = 执行器默认值)")
+            limit_spin.setFixedWidth(120)
+            limit_spin.valueChanged.connect(self._auto_save)
+            
+            row_layout.addWidget(cb)
+            row_layout.addStretch()
+            row_layout.addWidget(limit_spin)
+            
+            self.tools_container_layout.addWidget(row_widget)
+            self.tool_checkboxes[tool_name] = cb
+            self.tool_limit_spinboxes[tool_name] = limit_spin
+            
+            # 添加到初始工具下拉菜单
+            self.initial_tool_combo.addItem(tool_name)
+            
+        print(f"Loaded {len(tools)} tools")
     
     def _on_tools_list_changed(self):
         """处理列表中工具复选框的更改"""
