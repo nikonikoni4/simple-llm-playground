@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Any
-from async_executor import AsyncExecutor
+from simple_llm_playground.server.async_executor import AsyncExecutor
 from simple_llm_playground.schemas import ExecutionPlan
 
 # =============================================================================

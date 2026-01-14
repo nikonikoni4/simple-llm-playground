@@ -48,7 +48,7 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["simple_llm_playground"]
-exclude = ["llm_linear_executor*", "asset*", "docs_loc*"]
+exclude = ["llm_linear_executor*", "asset*", "docs_loc*", "example*", "test*", "run.bat", "README.md", "LICENSE"]
 
 [tool.setuptools.package-data]
 simple_llm_playground = ["*.json", "*.md"]

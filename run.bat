@@ -8,11 +8,11 @@ cd /d "%BASE_DIR%"
 echo [INFO] Init
 echo [INFO] Starting Backend Server (main.py)...
 
-start "Simple-LLM-Backend" cmd /k "python main.py"
+start "Simple-LLM-Backend" cmd /k "python -m simple_llm_playground.main"
 
 echo [INFO] Starting Debugger UI...
 :: 在新窗口运行前端 UI
-start "Simple-LLM-UI" cmd /k "python -m simple_llm_playground.qt_front.debugger_ui"
+start "Simple-LLM-UI" cmd /k "python -m simple_llm_playground.qt_front.main_ui"
  
 echo. 
 echo ======================================================
