@@ -28,7 +28,6 @@ dependencies = [
     "langchain-openai>=0.0.5",
     "aiohttp>=3.9.0",
     "PyQt5>=5.15.10",
-    "openai>=1.10.0",
     "requests",
     # 本地安装 llm-linear-executor（从子目录）
     "llm-linear-executor @ file:llm_linear_executor",
