@@ -644,6 +644,7 @@ class NodeGraphView(QGraphicsView):
         # 绘制 data_in 连接 (虚线)
         # 规则：对于每个非 main 线程，找到该线程的第一个节点（最小 ID），
         # 然后从其 data_in_thread 中找到 ID 最接近且小于该节点的源节点，绘制连线
+        # 额外规则：如果 data_in_slice = [A, B] 且 B <= A，则跳过绘制虚线
         # print(f"[DEBUG] threads: {list(threads.keys())}")
         for tid, thread_nodes in threads.items():
             if tid == "main":
@@ -651,6 +652,14 @@ class NodeGraphView(QGraphicsView):
             
             # 找到该线程的第一个节点（最小 ID）
             first_node = min(thread_nodes, key=lambda n: n.node_data.node_id)
+            
+            # 检查 data_in_slice：如果 [A, B] 且 A 和 B 都不为 None 且 B <= A，则跳过绘制虚线
+            data_in_slice = first_node.node_data.data_in_slice
+            if data_in_slice and len(data_in_slice) >= 2:
+                A, B = data_in_slice[0], data_in_slice[1]
+                if A is not None and B is not None and B <= A:
+                    continue  # B <= A 时不绘制 data_in 虚线
+            
             target_id = first_node.node_data.node_id
             
             # 获取源线程 ID

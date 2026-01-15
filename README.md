@@ -118,8 +118,8 @@ executor_manager.register_tool("your_tool_name", your_tool)
 - **Step**：单步执行。点击一次仅执行下一个待运行节点，便于逐步调试和观察中间状态。
 - **Run All**：连续执行整个 Workflow，直到流程结束或出错。
 
-### 3. User Message
-- **User Message**：用户输入区域。此处输入的内容将作为初始的用户消息（User Prompt），并默认注入到 `main` 线程中，作为整个 Workflow 的起始上下文数据。
+### 3. Task
+- **Task**：用户输入区域。此处输入的内容将作为初始的用户消息（初始 prompt），并默认注入到 `main` 线程中，作为整个 Workflow 的起始上下文数据。
 ### 4. Node Context
 位于左侧面板下方，用于展示**当前选中节点**（或最近执行节点）的运行时详情，是调试的核心区域：
 - **Context Information**：显示当前节点输入的所有上下文消息（Message History）。这是执行 `data_in_slice` 切片操作后的最终输入数据。
@@ -135,7 +135,7 @@ executor_manager.register_tool("your_tool_name", your_tool)
   - `tool-first`：强制首先执行指定工具，再由 LLM 分析结果。
 - **Branch (`thread_id`)**：当前节点运行所在的线程 ID。
 - **Src Thread (`data_in_thread`)**：输入数据的来源线程 ID（默认为 `main`）。
-- **Slice (`data_in_slice`)**：输入消息的切片范围。例如 `0,2` 表示取前两条，`-1,` 表示取最后一条。
+- **Slice (`data_in_slice`)**：输入消息的切片范围。例如 `0,2` 表示取前两条，`-1,` 表示取最后一条。**当某个线程不需要输入数据时，可以设置为 `-1,-1`**。
 - **Output Data to Parent (`data_out`)**：勾选后，该节点的执行结果将被输出。
 - **Out Thread (`data_out_thread`)**：输出结果合并到的目标线程 ID（默认为 `main`）。
 - **Out Desc (`data_out_description`)**：输出数据的描述前缀，用于辅助 LLM 理解数据含义。
