@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import pyqtSignal
 
 
-from simple_llm_playground.qt_front.api_client import ExecutorController
+from simple_llm_workflow.qt_front.api_client import ExecutorController
 
 
 class ExecutionControlPanel(QWidget):
@@ -159,7 +159,7 @@ class ExecutionControlPanel(QWidget):
         """
         try:
             import requests
-            from simple_llm_playground.config import BACKEND_PORT
+            from simple_llm_workflow.config import BACKEND_PORT
             
             response = requests.get(f"http://localhost:{BACKEND_PORT}/api/tools", timeout=5)
             if response.status_code == 200:

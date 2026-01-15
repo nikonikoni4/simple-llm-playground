@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QTextBrowser
-from simple_llm_playground.qt_front.utils import CollapsibleSection
-from simple_llm_playground.schemas import NodeProperties
+from simple_llm_workflow.qt_front.utils import CollapsibleSection
+from simple_llm_workflow.schemas import NodeProperties
 class NodeContextPanel(QGroupBox):
     """用于显示节点线程上下文信息的面板"""
     def __init__(self):

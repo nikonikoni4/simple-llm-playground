@@ -4,11 +4,11 @@ import asyncio
 from PyQt5.QtCore import QObject, QThread, pyqtSignal
 
 # 默认端口配置
-from simple_llm_playground.config import BACKEND_PORT
+from simple_llm_workflow.config import BACKEND_PORT
 
 from typing import Optional
 import aiohttp
-from simple_llm_playground.schemas import (
+from simple_llm_workflow.schemas import (
     InitExecutorRequest, InitExecutorResponse,
     StepExecutorRequest, StepExecutorResponse,
     ExecutorStatusResponse, ExecutionResultResponse,

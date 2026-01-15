@@ -1,4 +1,4 @@
-from simple_llm_playground.server.executor_manager import executor_manager
+from simple_llm_workflow.server.executor_manager import executor_manager
 import os
 from typing import Optional, Type, Callable
 from langchain_openai import ChatOpenAI
@@ -217,9 +217,9 @@ def setup_test_tools():
 # 3. 运行后端服务
 if __name__ == "__main__":
     import uvicorn
-    from simple_llm_playground.server.backend_api import app
-    from simple_llm_playground.server.executor_manager import executor_manager
-    from simple_llm_playground import config
+    from simple_llm_workflow.server.backend_api import app
+    from simple_llm_workflow.server.executor_manager import executor_manager
+    from simple_llm_workflow import config
     # 1. 设置 LLM 工厂
     setup_llm_factory()
 

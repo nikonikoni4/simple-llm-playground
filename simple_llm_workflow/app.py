@@ -31,7 +31,7 @@ os.chdir(BASE_DIR)
 def start_backend(port: int = 8001):
     """启动后端服务"""
     import uvicorn
-    from simple_llm_playground.server.backend_api import app
+    from simple_llm_workflow.server.backend_api import app
     
     # 禁用uvicorn的日志输出到stdout（避免打包后的窗口问题）
     config = uvicorn.Config(
@@ -47,8 +47,8 @@ def start_backend(port: int = 8001):
 def start_frontend():
     """启动前端UI"""
     from PyQt5.QtWidgets import QApplication
-    from simple_llm_playground.qt_front.main_ui import MainWindow
-    from simple_llm_playground.qt_front.utils import DARK_STYLESHEET
+    from simple_llm_workflow.qt_front.main_ui import MainWindow
+    from simple_llm_workflow.qt_front.utils import DARK_STYLESHEET
     
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_STYLESHEET)
@@ -61,9 +61,9 @@ def start_frontend():
 
 def setup_from_config():
     """从 tools_config.py 加载配置"""
-    from simple_llm_playground.tool_loader import find_tools_config, load_tools_from_file
-    from simple_llm_playground.server.executor_manager import executor_manager
-    from simple_llm_playground.main import create_llm_factory, setup_test_tools
+    from simple_llm_workflow.tool_loader import find_tools_config, load_tools_from_file
+    from simple_llm_workflow.server.executor_manager import executor_manager
+    from simple_llm_workflow.main import create_llm_factory, setup_test_tools
     
     # 查找并加载配置文件
     config_path = find_tools_config()
@@ -88,7 +88,7 @@ def setup_from_config():
             executor_manager.set_llm_factory(llm_factory)
     else:
         # 没有找到配置文件，使用内置测试工具
-        from simple_llm_playground.main import setup_llm_factory
+        from simple_llm_workflow.main import setup_llm_factory
         setup_llm_factory()
         setup_test_tools()
 
@@ -110,7 +110,7 @@ def main():
         
         # 从config获取端口
         try:
-            from simple_llm_playground import config
+            from simple_llm_workflow import config
             port = getattr(config, "BACKEND_PORT", 8001)
         except:
             port = 8001

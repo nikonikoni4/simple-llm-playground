@@ -2,8 +2,8 @@ from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsItem, QGraph
 from PyQt5.QtCore import Qt, QRectF, QPointF, pyqtSignal
 from PyQt5.QtGui import QPen, QColor, QWheelEvent, QPainter, QPainterPath, QFont
 import json
-from simple_llm_playground.qt_front.utils import NODE_COLORS, THREAD_COLORS
-from simple_llm_playground.schemas import (
+from simple_llm_workflow.qt_front.utils import NODE_COLORS, THREAD_COLORS
+from simple_llm_workflow.schemas import (
     NodeProperties, 
     GuiExecutionPlan, 
     NODE_GAP_X,

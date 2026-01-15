@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 from typing import Any
-from simple_llm_playground.server.async_executor import AsyncExecutor
-from simple_llm_playground.schemas import ExecutionPlan
+from simple_llm_workflow.server.async_executor import AsyncExecutor
+from simple_llm_workflow.schemas import ExecutionPlan
 
 # =============================================================================
 # 执行器管理

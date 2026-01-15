@@ -5,18 +5,18 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QH
 from PyQt5.QtCore import Qt
 
 # 本地导入
-from simple_llm_playground.qt_front.utils import DARK_STYLESHEET
-from simple_llm_playground.qt_front.context_panel import NodeContextPanel
-from simple_llm_playground.qt_front.graph import NodeGraphView
-from simple_llm_playground.qt_front.node_properties import NodePropertyEditor
+from simple_llm_workflow.qt_front.utils import DARK_STYLESHEET
+from simple_llm_workflow.qt_front.context_panel import NodeContextPanel
+from simple_llm_workflow.qt_front.graph import NodeGraphView
+from simple_llm_workflow.qt_front.node_properties import NodePropertyEditor
 
 # 应用配置
-from simple_llm_playground.config import BACKEND_PORT
+from simple_llm_workflow.config import BACKEND_PORT
 
 # 逻辑/后端导入
-from simple_llm_playground.schemas import ALL_NODE_TYPES, NodeProperties, GuiExecutionPlan
+from simple_llm_workflow.schemas import ALL_NODE_TYPES, NodeProperties, GuiExecutionPlan
 
-from simple_llm_playground.qt_front.execution_panel import ExecutionControlPanel
+from simple_llm_workflow.qt_front.execution_panel import ExecutionControlPanel
 
 
 class MainWindow(QMainWindow):

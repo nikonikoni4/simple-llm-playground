@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import os
-from simple_llm_playground.server.executor_manager import executor_manager
-from simple_llm_playground.schemas import (
+from simple_llm_workflow.server.executor_manager import executor_manager
+from simple_llm_workflow.schemas import (
     ExecutionPlan,
     InitExecutorRequest, InitExecutorResponse,
     StepExecutorRequest, StepExecutorResponse,

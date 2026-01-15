@@ -4,14 +4,14 @@ from PyQt5.QtWidgets import (QGroupBox, QVBoxLayout, QWidget, QHBoxLayout, QForm
                              QLineEdit, QComboBox, QTextEdit, QCheckBox, QLabel, QFrame, 
                              QSpinBox, QScrollArea, QTabWidget, QPushButton, QDoubleSpinBox)
 from PyQt5.QtCore import pyqtSignal
-from simple_llm_playground.qt_front.utils import NoScrollComboBox
+from simple_llm_workflow.qt_front.utils import NoScrollComboBox
 import json
 
 # 配置导入
-from simple_llm_playground.config import BACKEND_PORT
+from simple_llm_workflow.config import BACKEND_PORT
 
 # Schema 导入
-from simple_llm_playground.schemas import ALL_NODE_TYPES, NodeProperties
+from simple_llm_workflow.schemas import ALL_NODE_TYPES, NodeProperties
 
 
 class NodePropertyEditor(QGroupBox):

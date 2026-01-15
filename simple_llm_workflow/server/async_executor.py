@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Callable, Optional, Any
 from llm_linear_executor.executor import Executor 
-from simple_llm_playground.schemas import (
+from simple_llm_workflow.schemas import (
     NodeDefinition, ExecutionPlan,NodeStatus,NodeContext,NodeStatus,NodeExecutionState
 )
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage

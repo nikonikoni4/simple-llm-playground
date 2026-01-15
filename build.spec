@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(SPECPATH)
 
 # 主入口
-ENTRY_POINT = str(ROOT / 'simple_llm_playground' / 'app.py')
+ENTRY_POINT = str(ROOT / 'simple_llm_workflow' / 'app.py')
 
 # ============================================================================
 # 分析阶段
@@ -59,20 +59,20 @@ a = Analysis(
         'langchain_openai',
         
         # 项目模块
-        'simple_llm_playground.server.backend_api',
-        'simple_llm_playground.server.executor_manager',
-        'simple_llm_playground.server.async_executor',
-        'simple_llm_playground.qt_front.main_ui',
-        'simple_llm_playground.qt_front.graph',
-        'simple_llm_playground.qt_front.node_properties',
-        'simple_llm_playground.qt_front.context_panel',
-        'simple_llm_playground.qt_front.execution_panel',
-        'simple_llm_playground.qt_front.api_client',
-        'simple_llm_playground.qt_front.utils',
-        'simple_llm_playground.schemas',
-        'simple_llm_playground.main',
-        'simple_llm_playground.tool_loader',
-        'simple_llm_playground.config',
+        'simple_llm_workflow.server.backend_api',
+        'simple_llm_workflow.server.executor_manager',
+        'simple_llm_workflow.server.async_executor',
+        'simple_llm_workflow.qt_front.main_ui',
+        'simple_llm_workflow.qt_front.graph',
+        'simple_llm_workflow.qt_front.node_properties',
+        'simple_llm_workflow.qt_front.context_panel',
+        'simple_llm_workflow.qt_front.execution_panel',
+        'simple_llm_workflow.qt_front.api_client',
+        'simple_llm_workflow.qt_front.utils',
+        'simple_llm_workflow.schemas',
+        'simple_llm_workflow.main',
+        'simple_llm_workflow.tool_loader',
+        'simple_llm_workflow.config',
         
         # llm_linear_executor 子模块（完整导入）
         'llm_linear_executor',

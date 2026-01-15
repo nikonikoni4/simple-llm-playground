@@ -91,7 +91,7 @@ llm_factory = create_llm_factory(model,api_key,chat_model=ChatOpenAI)
 在 `main.py` 中导入工具函数（基于langchain的@tool装饰器的工具函数，或在导入后增加@tool装饰器包装函数），快速接入本地数据或业务逻辑。
 
 ```python
-from simple_llm_playground.server.executor_manager import executor_manager
+from simple_llm_workflow.server.executor_manager import executor_manager
 from your_path import ( tools )
 
 executor_manager.register_tool("your_tool_name", your_tool)
