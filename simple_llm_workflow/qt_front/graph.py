@@ -10,6 +10,7 @@ from simple_llm_workflow.schemas import (
     THREAD_GAP_Y,
     MAIN_Y_BASELINE,
 )
+from simple_llm_workflow.thread_manager import ThreadManager
 from typing import Union, Dict, Optional, List
 class NodeItem(QGraphicsItem):
     """
@@ -519,13 +520,19 @@ class NodeGraphView(QGraphicsView):
         self.drag_start_item = None
         self.drag_temp_line = None
         
-        # 线程视图索引管理
+        # 线程视图索引管理 - 作为本地缓存，与 ThreadManager 同步
         self.threadId_map_viewId = {}  # thread_id -> index (int)
         
         # === 多 Pattern 数据存储 ===
         self.all_plans: Dict[str, GuiExecutionPlan] = {}  # pattern_name -> GuiExecutionPlan
         self.current_pattern: str = ""  # 当前显示的 pattern 名称
         self.current_file_path: Optional[str] = None  # 当前加载的文件路径
+        
+        # === 连接 ThreadManager 信号 ===
+        tm = ThreadManager.instance()
+        tm.threadRenamed.connect(self._on_thread_renamed)
+        tm.threadDeleted.connect(self._on_thread_deleted)
+        tm.viewIndicesChanged.connect(self._on_view_indices_changed)
         
         # 不再硬编码初始节点，由 load_from_file 或手动添加
         # 将视图中心对准左下角区域
@@ -729,22 +736,55 @@ class NodeGraphView(QGraphicsView):
     def clear_nodes(self):
         self.scene.clear()
     
-    def update_node_color(self, node_data):
-        """当节点的 thread_id 改变时更新特定节点的颜色"""
-        # 查找匹配数据的节点项
+    def update_node_branch(self, node_data):
+        """
+        当节点的 thread_id 改变时更新节点的颜色和位置
+        
+        Args:
+            node_data: 更新后的节点数据，包含 node_id, thread_id, thread_view_index
+        """
+        # 支持 dict 和 NodeProperties 对象
+        if isinstance(node_data, dict):
+            node_id = node_data.get("node_id") or node_data.get("id")
+            thread_id = node_data.get("thread_id", "main")
+            thread_view_index = node_data.get("thread_view_index", 0)
+        else:
+            node_id = node_data.node_id
+            thread_id = node_data.thread_id
+            thread_view_index = node_data.thread_view_index
+        
+        # 查找匹配的节点项
         nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in nodes:
-            if node.node_data.node_id == node_data.node_id:
-                # 获取新线程颜色
-                thread_id = node_data.thread_id
+            if node.node_data.node_id == node_id:
+                # 1. 更新节点数据
+                node.node_data.thread_id = thread_id
+                node.node_data.thread_view_index = thread_view_index
+                
+                # 2. 更新线程颜色
                 new_color = self.get_thread_color(thread_id)
                 node.thread_color = new_color
-                # 强制重绘
+                
+                # 3. 更新节点位置（Y坐标根据 thread_view_index 变化）
+                # node_data 的 x, y 会在 thread_view_index 被设置时自动计算
+                node.setPos(node.node_data.x, node.node_data.y)
+                
+                # 4. 强制重绘
                 node.update()
+                
+                print(f"Graph: Updated node {node_id} to thread '{thread_id}' (view_index: {thread_view_index}, pos: {node.node_data.x}, {node.node_data.y})")
                 break
+        
+        # 同步本地缓存
+        self.threadId_map_viewId = ThreadManager.instance().get_thread_to_view_index_map()
         
         # 更新所有连接，因为线程关系可能已改变
         self.update_connections()
+    
+    def update_node_color(self, node_data):
+        """当节点的 thread_id 改变时更新特定节点的颜色（兼容旧接口）"""
+        # 调用新的完整更新方法
+        self.update_node_branch(node_data)
     
     def update_node_status(self, node_id: int, status: str):
         """
@@ -920,6 +960,9 @@ class NodeGraphView(QGraphicsView):
         tidx = parent_item.node_data.thread_view_index
         node_id = self.next_node_id
 
+        # 注册新节点到 ThreadManager
+        ThreadManager.instance().register_node(node_id, parent_thread)
+
         new_data = NodeProperties(**{
             "node_name": "New Node", 
             "node_type": "llm-first", 
@@ -938,14 +981,13 @@ class NodeGraphView(QGraphicsView):
         # 为分支创建新的线程 ID
         new_thread_id = f"branch_{self.next_node_id}"
 
-        # 使用下一个可用索引
-        current_indices = self.threadId_map_viewId.values()
-        next_idx = max(current_indices) + 1 if current_indices else 1 # 0 是 main 线程
-        
-        # 注册新线程
-        self.threadId_map_viewId[new_thread_id] = next_idx
-        
         node_id = self.next_node_id
+
+        # 使用 ThreadManager 注册新节点（这会自动创建新线程）
+        next_idx = ThreadManager.instance().register_node(node_id, new_thread_id)
+        
+        # 同步本地缓存
+        self.threadId_map_viewId = ThreadManager.instance().get_thread_to_view_index_map()
 
         new_data = NodeProperties(**{
             "node_name": "Branch", 
@@ -966,6 +1008,9 @@ class NodeGraphView(QGraphicsView):
         deleted_thread_id = item.node_data.thread_id
         self.scene.removeItem(item)
         
+        # 从 ThreadManager 注销节点（如果线程变空会自动删除）
+        ThreadManager.instance().unregister_node(deleted_id, deleted_thread_id)
+        
         # 重新对 ID > deleted_id 的所有节点进行编号
         nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in nodes:
@@ -973,44 +1018,13 @@ class NodeGraphView(QGraphicsView):
             if node_id > deleted_id:
                 new_id = node_id - 1
                 node.node_data.node_id = new_id  # 这会自动触发 x 坐标计算
-                # [已注释 - 坐标由 schemas.py 自动计算]
-                # node.setPos((new_id - 1) * self.node_gap_x, node.y())
                 node.setPos(node.node_data.x, node.node_data.y)  # 使用自动计算的坐标
         
         # 递减 next_node_id 计数器
         self.next_node_id = max(1, self.next_node_id - 1)
         
-        # 检查被删除节点的线程是否还有其他节点
-        # 如果没有，需要删除该线程并重新排序 threadId_map_viewId
-        if deleted_thread_id != "main":  # main 线程不能被删除
-            remaining_nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
-            thread_has_nodes = any(
-                node.node_data.thread_id == deleted_thread_id 
-                for node in remaining_nodes
-            )
-            
-            if not thread_has_nodes and deleted_thread_id in self.threadId_map_viewId:
-                # 该线程没有剩余节点，需要删除线程并重新排序
-                del_viewId = self.threadId_map_viewId[deleted_thread_id]
-                
-                # 从映射中删除该线程
-                del self.threadId_map_viewId[deleted_thread_id]
-                
-                # 所有 viewId > del_viewId 的线程，其 viewId -= 1
-                for tid in list(self.threadId_map_viewId.keys()):
-                    if self.threadId_map_viewId[tid] > del_viewId:
-                        self.threadId_map_viewId[tid] -= 1
-                
-                # 更新剩余节点的 thread_view_index
-                for node in remaining_nodes:
-                    node_thread_id = node.node_data.thread_id
-                    if node_thread_id in self.threadId_map_viewId:
-                        new_idx = self.threadId_map_viewId[node_thread_id]
-                        if node.node_data.thread_view_index != new_idx:
-                            node.node_data.thread_view_index = new_idx  # 这会自动触发 y 坐标计算
-                            node.setPos(node.node_data.x, node.node_data.y)
-                
-                print(f"Deleted empty thread: {deleted_thread_id} (viewId: {del_viewId})")
+        # 同步本地缓存（ThreadManager 可能已删除空线程）
+        self.threadId_map_viewId = ThreadManager.instance().get_thread_to_view_index_map()
         
         self.update_connections()
     
@@ -1021,6 +1035,11 @@ class NodeGraphView(QGraphicsView):
         规则：
         1. main线程不能被删除
         2. 删除后，所有 thread_view_index > deleted_idx 的线程索引 -1
+        
+        流程：
+        1. 先从 ThreadManager 中注销所有该线程的节点（这会触发线程自动删除）
+        2. 从 ThreadManager 同步最新的 threadId_map_viewId
+        3. 更新 UI 和节点位置
         """
         del_thread_id = item.node_data.thread_id
         
@@ -1028,23 +1047,14 @@ class NodeGraphView(QGraphicsView):
         if del_thread_id == "main":
             print("Cannot delete main thread")
             return
-             
-        # 1. 获取当前删除线程的 viewId
+         
+        # 1. 获取当前删除线程的 viewId（用于后续日志）
         del_viewId = self.threadId_map_viewId.get(del_thread_id)
         if del_viewId is None:
             print(f"Thread {del_thread_id} not found in threadId_map_viewId")
             return
         
-        # 2. 删除 threadId_map_viewId 中的 del_thread_id
-        del self.threadId_map_viewId[del_thread_id]
-        
-        # 3. 遍历 threadId_map_viewId，更新索引
-        # 所有 viewId > del_viewId 的线程，其 viewId -= 1
-        for tid in list(self.threadId_map_viewId.keys()):
-            if self.threadId_map_viewId[tid] > del_viewId:
-                self.threadId_map_viewId[tid] -= 1
-        
-        # 4. 删除所有节点中 thread_id 为 del_thread_id 的节点
+        # 2. 收集所有属于该线程的节点
         nodes_to_remove = []
         deleted_ids = []  # 收集所有被删除节点的 ID
         for i in self.scene.items():
@@ -1052,14 +1062,22 @@ class NodeGraphView(QGraphicsView):
                 nodes_to_remove.append(i)
                 deleted_ids.append(i.node_data.node_id)
         
-        # 删除节点
+        # 3. 从 ThreadManager 中注销所有节点（这会自动触发线程删除和信号发射）
+        thread_manager = ThreadManager.instance()
+        for node_id in deleted_ids:
+            thread_manager.unregister_node(node_id, del_thread_id)
+        
+        # 4. 从 ThreadManager 同步最新的 threadId_map_viewId
+        self.threadId_map_viewId = thread_manager.get_thread_to_view_index_map()
+        
+        # 5. 从场景中删除节点
         for node in nodes_to_remove:
             self.scene.removeItem(node)
         
         # 对删除的 ID 排序，用于高效计算偏移量
         deleted_ids.sort()
         
-        # 5. 更新剩余节点的 node_id 和 thread_view_index
+        # 6. 更新剩余节点的 node_id 和 thread_view_index
         remaining_nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
         for node in remaining_nodes:
             # 使用二分查找计算有多少被删除的 ID 小于当前节点的 ID
@@ -1221,8 +1239,11 @@ class NodeGraphView(QGraphicsView):
     def add_main_node(self):
         node_id = self.next_node_id
         
-        if "main" not in self.threadId_map_viewId:
-             self.threadId_map_viewId["main"] = 0
+        # 使用 ThreadManager 注册节点到 main 线程
+        view_idx = ThreadManager.instance().register_node(node_id, "main")
+        
+        # 同步本地缓存
+        self.threadId_map_viewId = ThreadManager.instance().get_thread_to_view_index_map()
              
         node_data = NodeProperties(**{
             "node_name": "New Node",
@@ -1230,7 +1251,7 @@ class NodeGraphView(QGraphicsView):
             "thread_id": "main",
             "task_prompt": "",
             "node_id": node_id, 
-            "thread_view_index": self.threadId_map_viewId["main"],
+            "thread_view_index": view_idx,
         })
         self.add_node(node_data)
     # ==================== 多 Pattern 数据管理 ====================
@@ -1310,8 +1331,11 @@ class NodeGraphView(QGraphicsView):
         # 重置颜色映射
         self.thread_color_map.clear()
         
-        # 同步 threadId_map_viewId
+        # 同步 threadId_map_viewId (本地缓存)
         self.threadId_map_viewId = plan.threadId_map_viewId.copy()
+        
+        # 同步到 ThreadManager
+        ThreadManager.instance().sync_from_plan(plan)
         
         # 创建节点
         for node in plan.nodes:
@@ -1503,5 +1527,64 @@ class NodeGraphView(QGraphicsView):
         
         print(f"Renamed pattern: '{old_name}' -> '{new_name}'")
         return True
+    
+    # ==================== ThreadManager 信号处理 ====================
+    
+    def _on_thread_renamed(self, old_name: str, new_name: str):
+        """
+        当线程被重命名时，更新所有相关节点的 thread_id
+        """
+        # 更新本地缓存
+        if old_name in self.threadId_map_viewId:
+            view_id = self.threadId_map_viewId.pop(old_name)
+            self.threadId_map_viewId[new_name] = view_id
+        
+        # 更新颜色映射
+        if old_name in self.thread_color_map:
+            color = self.thread_color_map.pop(old_name)
+            self.thread_color_map[new_name] = color
+        
+        # 更新所有节点的相关字段
+        nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
+        for node in nodes:
+            if node.node_data.thread_id == old_name:
+                node.node_data.thread_id = new_name
+            if node.node_data.data_in_thread == old_name:
+                node.node_data.data_in_thread = new_name
+            if node.node_data.data_out_thread == old_name:
+                node.node_data.data_out_thread = new_name
+            node.update()  # 触发重绘
+        
+        self.update_connections()
+        print(f"Graph: Updated nodes for thread rename: '{old_name}' -> '{new_name}'")
+    
+    def _on_thread_deleted(self, thread_id: str):
+        """
+        当空线程被删除时，更新本地缓存
+        """
+        if thread_id in self.threadId_map_viewId:
+            del self.threadId_map_viewId[thread_id]
+        if thread_id in self.thread_color_map:
+            del self.thread_color_map[thread_id]
+        print(f"Graph: Removed thread from cache: '{thread_id}'")
+    
+    def _on_view_indices_changed(self):
+        """
+        当线程视图索引变化时，更新所有节点的位置
+        """
+        tm = ThreadManager.instance()
+        # 同步本地缓存
+        self.threadId_map_viewId = tm.get_thread_to_view_index_map()
+        
+        # 更新所有节点的 Y 位置
+        nodes = [i for i in self.scene.items() if isinstance(i, NodeItem)]
+        for node in nodes:
+            new_idx = tm.get_thread_view_index(node.node_data.thread_id)
+            if new_idx is not None and node.node_data.thread_view_index != new_idx:
+                node.node_data.thread_view_index = new_idx  # 这会自动触发 y 坐标计算
+                node.setPos(node.node_data.x, node.node_data.y)
+        
+        self.update_connections()
+        print(f"Graph: Updated node positions after view indices changed")
 
 

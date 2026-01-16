@@ -13,10 +13,13 @@ from simple_llm_workflow.config import BACKEND_PORT
 # Schema 导入
 from simple_llm_workflow.schemas import ALL_NODE_TYPES, NodeProperties
 
+# ThreadManager 导入
+from simple_llm_workflow.thread_manager import ThreadManager
+
 
 class NodePropertyEditor(QGroupBox):
     nodeDataChanged = pyqtSignal()  # 保存节点数据时发出的信号
-    branchChanged = pyqtSignal(dict)  # 分支 (thread_id) 更改时发出的信号
+    branchChanged = pyqtSignal(NodeProperties)  # 分支 (thread_id) 更改时发出的信号
     
     def __init__(self):
         super().__init__("节点属性")
@@ -60,9 +63,10 @@ class NodePropertyEditor(QGroupBox):
         self.type_combo = QComboBox()
         self.type_combo.addItems(list(ALL_NODE_TYPES))
         
-        # --- 分支设置 ---
-        self.branch_name_edit = QLineEdit()
-        self.branch_name_edit.setPlaceholderText("分支名称 (thread_id)")
+        # --- 分支设置 (改为可编辑下拉菜单) ---
+        self.branch_combo = QComboBox()
+        self.branch_combo.setEditable(True)
+        self.branch_combo.lineEdit().setPlaceholderText("选择或输入分支名称")
         
         # --- 任务提示词 (将在单独的标签页中) ---
         self.prompt_edit = QTextEdit()
@@ -89,17 +93,19 @@ class NodePropertyEditor(QGroupBox):
         self.initial_tool_args_edit.setPlaceholderText('初始参数，例如 {"arg": "val"}')
         self.initial_tool_args_edit.setMinimumHeight(300)
 
-        # --- 数据流输入 ---
-        self.data_in_thread_edit = QLineEdit()
-        self.data_in_thread_edit.setPlaceholderText("源线程 ID (可选)")
+        # --- 数据流输入 (改为只读下拉菜单) ---
+        self.data_in_thread_combo = QComboBox()
+        self.data_in_thread_combo.setEditable(False)
+        # self.data_in_thread_combo.lineEdit().setPlaceholderText("选择源线程 (可选)")
         
         self.data_in_slice_edit = QLineEdit()
         self.data_in_slice_edit.setPlaceholderText("切片: start,end (例如 -5, 或 0,2)")
 
-        # --- 数据流输出 ---
+        # --- 数据流输出 (改为只读下拉菜单) ---
         self.data_out_cb = QCheckBox("输出数据到父级")
-        self.data_out_thread_edit = QLineEdit()
-        self.data_out_thread_edit.setPlaceholderText("目标线程 ID (默认为 main)")
+        self.data_out_thread_combo = QComboBox()
+        self.data_out_thread_combo.setEditable(False)
+        # self.data_out_thread_combo.lineEdit().setPlaceholderText("选择目标线程 (默认 main)")
         self.desc_edit = QLineEdit()
         self.desc_edit.setPlaceholderText("输出数据描述")
         
@@ -112,18 +118,18 @@ class NodePropertyEditor(QGroupBox):
         # 左列
         self.left_form.addRow("名称:", self.name_edit)
         self.left_form.addRow("类型:", self.type_combo)
-        self.left_form.addRow("分支:", self.branch_name_edit)
+        self.left_form.addRow("分支:", self.branch_combo)
         
         # 右列
         # 数据输入部分
         self.right_form.addRow(QLabel("--- 数据输入 ---"))
-        self.right_form.addRow("源线程:", self.data_in_thread_edit)
+        self.right_form.addRow("源线程:", self.data_in_thread_combo)
         self.right_form.addRow("切片:", self.data_in_slice_edit)
         
         # 数据输出部分
         self.right_form.addRow(QLabel("--- 数据输出 ---"))
         self.right_form.addRow("", self.data_out_cb)
-        self.right_form.addRow("输出线程:", self.data_out_thread_edit)
+        self.right_form.addRow("输出线程:", self.data_out_thread_combo)
         self.right_form.addRow("输出描述:", self.desc_edit)
         
         # --- 任务提示词标签页 ---
@@ -256,24 +262,25 @@ class NodePropertyEditor(QGroupBox):
         # 所有输入字段在更改时都会自动保存
         self.name_edit.textChanged.connect(self._auto_save)
         self.type_combo.currentTextChanged.connect(self._auto_save)
-        self.branch_name_edit.textChanged.connect(self._auto_save)
-        self.prompt_edit.textChanged.connect(self._auto_save)
+        self.branch_combo.currentTextChanged.connect(self._on_branch_changed)
         self.prompt_edit.textChanged.connect(self._auto_save)
         # self.tools_list_widget.itemChanged.connect(self._on_tools_list_changed) # 已删除，改为单独连接
         self.enable_tool_loop_cb.stateChanged.connect(self._auto_save)
-        self.enable_tool_loop_cb.stateChanged.connect(self._auto_save)
         # initial_tool_combo 在 _on_init_tool_selected 中处理
         self.initial_tool_args_edit.textChanged.connect(self._auto_save)
-        self.data_in_thread_edit.textChanged.connect(self._auto_save)
+        self.data_in_thread_combo.currentTextChanged.connect(self._auto_save)
         self.data_in_slice_edit.textChanged.connect(self._auto_save)
         self.data_out_cb.stateChanged.connect(self._auto_save)
-        self.data_out_thread_edit.textChanged.connect(self._auto_save)
+        self.data_out_thread_combo.currentTextChanged.connect(self._auto_save)
         self.desc_edit.textChanged.connect(self._auto_save)
         # LLM 设置
         self.temp_spin.valueChanged.connect(self._auto_save)
         self.topp_spin.valueChanged.connect(self._auto_save)
         self.enable_search_cb.stateChanged.connect(self._auto_save)
         self.enable_thinking_cb.stateChanged.connect(self._auto_save)
+        
+        # --- 连接 ThreadManager 信号 ---
+        ThreadManager.instance().threadsChanged.connect(self._refresh_thread_dropdowns)
         
         # 工具列表将由外部传入 (main_ui 通过 execution_panel 获取)
 
@@ -313,6 +320,68 @@ class NodePropertyEditor(QGroupBox):
         """当任何字段更改时自动保存数据"""
         if not self._loading_data and self.current_node_data is not None:
             self._save_to_node_data()
+    
+    def _on_branch_changed(self, new_thread_id: str):
+        """
+        处理分支下拉菜单变更
+        
+        当用户选择新的线程时，立即同步到 ThreadManager
+        """
+        if self._loading_data or self.current_node_data is None:
+            return
+        
+        # 获取当前节点的原始 thread_id
+        old_thread_id = self._get_node_val("thread_id", "main")
+        new_thread_id = new_thread_id.strip() or "main"
+        
+        # 如果线程没有变化，只执行自动保存
+        if old_thread_id == new_thread_id:
+            self._save_to_node_data()
+            return
+        
+        # 获取节点 ID
+        node_id = self._get_node_val("node_id")
+        if node_id is None:
+            node_id = self._get_node_val("id")
+        
+        if node_id is not None:
+            # 调用 ThreadManager 移动节点到新线程
+            new_view_index = ThreadManager.instance().move_node_to_thread(
+                node_id, old_thread_id, new_thread_id
+            )
+            # 更新节点数据
+            self._set_node_val("thread_id", new_thread_id)
+            self._set_node_val("thread_view_index", new_view_index)
+            print(f"Moved node {node_id} from '{old_thread_id}' to '{new_thread_id}' (view_index: {new_view_index})")
+            
+            # 发出信号以更新节点颜色
+            self.branchChanged.emit(self.current_node_data)
+        else:
+            # 没有 node_id 时只保存数据
+            self._save_to_node_data()
+    
+    def _refresh_thread_dropdowns(self, thread_list: list = None):
+        """
+        刷新所有线程下拉菜单
+        
+        当 ThreadManager 发出 threadsChanged 信号时调用
+        """
+        if thread_list is None:
+            thread_list = ThreadManager.instance().get_all_thread_ids()
+        
+        # 更新所有线程相关的 ComboBox
+        for combo in [self.branch_combo, self.data_in_thread_combo, self.data_out_thread_combo]:
+            current_text = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItems(thread_list)
+            # 恢复选择
+            idx = combo.findText(current_text)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            elif current_text:
+                combo.setEditText(current_text)
+            combo.blockSignals(False)
     
     def load_available_tools(self, tools: list = None):
         """
@@ -477,11 +546,17 @@ class NodePropertyEditor(QGroupBox):
         if ntype == "tool": ntype = "tool-first"
         self.type_combo.setCurrentText(ntype)
         
-        # 加载分支名称 (thread_id)
-        self.branch_name_edit.setText(self._get_node_val("thread_id", "main"))
+        # 加载分支名称 (thread_id) - 使用 ComboBox
+        thread_id = self._get_node_val("thread_id", "main")
+        # 先刷新下拉列表，然后设置当前值
+        self._refresh_thread_dropdowns()
+        self.branch_combo.setCurrentText(thread_id)
         # 为 ID=1 的节点锁定分支字段 (必须保持为 'main')
-        self.branch_name_edit.setReadOnly(is_main_node)
-        self.branch_name_edit.setStyleSheet("background-color: #3e3e3e;" if is_main_node else "")
+        self.branch_combo.setEnabled(not is_main_node)
+        if is_main_node:
+            self.branch_combo.setStyleSheet("background-color: #3e3e3e;")
+        else:
+            self.branch_combo.setStyleSheet("")
         
         self.prompt_edit.setText(self._get_node_val("task_prompt", ""))
         
@@ -523,7 +598,8 @@ class NodePropertyEditor(QGroupBox):
             self.initial_tool_args_edit.clear()
             
         # 数据输入 - 受限：只有线程中的第一个节点可以编辑
-        self.data_in_thread_edit.setText(self._get_node_val("data_in_thread") or "")
+        data_in_thread = self._get_node_val("data_in_thread") or ""
+        self.data_in_thread_combo.setCurrentText(data_in_thread)
         
         slice_val = self._get_node_val("data_in_slice")
         if slice_val:
@@ -536,18 +612,19 @@ class NodePropertyEditor(QGroupBox):
             self.data_in_slice_edit.clear()
             
         # 应用限制
-        self.data_in_thread_edit.setEnabled(is_first_in_thread)
+        self.data_in_thread_combo.setEnabled(is_first_in_thread)
         self.data_in_slice_edit.setEnabled(is_first_in_thread)
         if not is_first_in_thread:
-            self.data_in_thread_edit.setToolTip("只有线程的第一个节点可以编辑数据输入。")
+            self.data_in_thread_combo.setToolTip("只有线程的第一个节点可以编辑数据输入。")
             self.data_in_slice_edit.setToolTip("只有线程的第一个节点可以编辑数据输入。")
         else:
-            self.data_in_thread_edit.setToolTip("")
+            self.data_in_thread_combo.setToolTip("")
             self.data_in_slice_edit.setToolTip("")
             
         # 数据输出
         self.data_out_cb.setChecked(self._get_node_val("data_out", False))
-        self.data_out_thread_edit.setText(self._get_node_val("data_out_thread") or "")
+        data_out_thread = self._get_node_val("data_out_thread") or ""
+        self.data_out_thread_combo.setCurrentText(data_out_thread)
         self.desc_edit.setText(self._get_node_val("data_out_description", ""))
         
         # LLM 设置
@@ -583,7 +660,7 @@ class NodePropertyEditor(QGroupBox):
         if is_main_node:
             self._set_node_val("thread_id", "main")
         else:
-            self._set_node_val("thread_id", self.branch_name_edit.text().strip() or "main")
+            self._set_node_val("thread_id", self.branch_combo.currentText().strip() or "main")
         
         self._set_node_val("task_prompt", self.prompt_edit.toPlainText())
         
@@ -625,7 +702,8 @@ class NodePropertyEditor(QGroupBox):
             self._set_node_val("initial_tool_args", None)
 
         # 数据输入
-        self._set_node_val("data_in_thread", self.data_in_thread_edit.text() or None)
+        data_in_thread = self.data_in_thread_combo.currentText().strip()
+        self._set_node_val("data_in_thread", data_in_thread if data_in_thread else None)
         
         slice_str = self.data_in_slice_edit.text().strip()
         if slice_str:
@@ -647,7 +725,8 @@ class NodePropertyEditor(QGroupBox):
 
         # 数据输出
         self._set_node_val("data_out", self.data_out_cb.isChecked())
-        self._set_node_val("data_out_thread", self.data_out_thread_edit.text() or None)
+        data_out_thread = self.data_out_thread_combo.currentText().strip()
+        self._set_node_val("data_out_thread", data_out_thread if data_out_thread else None)
         self._set_node_val("data_out_description", self.desc_edit.text())
         
         # LLM 设置
@@ -659,18 +738,8 @@ class NodePropertyEditor(QGroupBox):
     def save_node_data(self):
         """手动保存 - 更新数据并触发连接更新"""
         if self.current_node_data is not None:
-            # 检查分支 (thread_id) 是否已更改
-            old_thread_id = self._get_node_val("thread_id", "main")
-            
-            # 首先保存所有数据
+            # 保存所有数据（分支变更已在 _on_branch_changed 中处理）
             self._save_to_node_data()
-            
-            new_thread_id = self._get_node_val("thread_id", "main")
-            branch_changed = (old_thread_id != new_thread_id)
             
             print(f"Saved Node: {self.current_node_data}")
             self.nodeDataChanged.emit()  # 通知图表更新连接
-            
-            # 如果分支改变，发出信号以更新节点颜色
-            if branch_changed:
-                self.branchChanged.emit(self.current_node_data if isinstance(self.current_node_data, dict) else self.current_node_data.model_dump())

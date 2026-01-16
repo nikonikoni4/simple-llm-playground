@@ -277,8 +277,8 @@ class MainWindow(QMainWindow):
         self._update_execution_plan()
         
     def on_branch_changed(self, node_data):
-        """处理分支 (thread_id) 更改以更新节点颜色"""
-        self.graph_view.update_node_color(node_data)
+        """处理分支 (thread_id) 更改以更新节点颜色和位置"""
+        self.graph_view.update_node_branch(node_data)
 
     # ==================== 多 Pattern 管理 ====================
     
