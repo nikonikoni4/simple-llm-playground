@@ -4,35 +4,35 @@ from simple_llm_workflow.schemas import NodeProperties
 class NodeContextPanel(QGroupBox):
     """用于显示节点线程上下文信息的面板"""
     def __init__(self):
-        super().__init__("Node Context")
+        super().__init__("节点上下文")
         self.main_layout = QVBoxLayout()
         self.main_layout.setContentsMargins(10, 15, 10, 10)
         self.main_layout.setSpacing(8)
         
         # 上下文消息部分
-        self.context_section = CollapsibleSection("Context Information")
+        self.context_section = CollapsibleSection("上下文信息")
         self.context_browser = QTextBrowser()
         self.context_browser.setMinimumHeight(300)
         self.context_browser.setMaximumHeight(1500)
-        self.context_browser.setPlaceholderText("No context data available")
+        self.context_browser.setPlaceholderText("暂无上下文数据")
         self.context_section.set_content(self.context_browser)
         self.main_layout.addWidget(self.context_section)
         
         # LLM 输入提示词部分
-        self.prompt_section = CollapsibleSection("LLM Input Prompt")
+        self.prompt_section = CollapsibleSection("LLM 输入提示")
         self.prompt_browser = QTextBrowser()
         self.prompt_browser.setMinimumHeight(600)
         self.prompt_browser.setMaximumHeight(1500)
-        self.prompt_browser.setPlaceholderText("No prompt data available")
+        self.prompt_browser.setPlaceholderText("暂无提示词数据")
         self.prompt_section.set_content(self.prompt_browser)
         self.main_layout.addWidget(self.prompt_section)
         
         # 节点输出部分
-        self.output_section = CollapsibleSection("Node Output")
+        self.output_section = CollapsibleSection("节点输出")
         self.output_browser = QTextBrowser()
         self.output_browser.setMinimumHeight(600)
         self.output_browser.setMaximumHeight(1500)
-        self.output_browser.setPlaceholderText("No output data available")
+        self.output_browser.setPlaceholderText("暂无输出数据")
         self.output_section.set_content(self.output_browser)
         self.main_layout.addWidget(self.output_section)
         
@@ -51,23 +51,23 @@ class NodeContextPanel(QGroupBox):
         
         # 上下文信息
         context_html = f"""
-        <b>Node:</b> {node_name}<br>
-        <b>Thread ID:</b> {thread_id}<br>
-        <b>Status:</b> <i>Not executed yet</i><br>
+        <b>节点:</b> {node_name}<br>
+        <b>线程 ID:</b> {thread_id}<br>
+        <b>状态:</b> <i>尚未执行</i><br>
         <br>
-        <i>Context messages will appear here during execution</i>
+        <i>执行期间上下文消息将显示在此处</i>
         """
         self.context_browser.setHtml(context_html)
         
         # 提示词信息
         prompt_html = f"""
-        <i>LLM input prompt will appear here during execution</i>
+        <i>执行期间 LLM 输入提示词将显示在此处</i>
         """
         self.prompt_browser.setHtml(prompt_html)
         
         # 输出信息
         output_html = f"""
-        <i>Node output will appear here after execution</i>
+        <i>执行后节点输出将显示在此处</i>
         """
         self.output_browser.setHtml(output_html)
     
@@ -86,7 +86,7 @@ class NodeContextPanel(QGroupBox):
                          thread_messages_before, thread_messages_after,
                          llm_input, llm_output, tool_calls, data_out_content 的字典
         """
-        node_name = context_data.get("node_name", "Unknown")
+        node_name = context_data.get("node_name", "未知")
         node_id = context_data.get("node_id", "?")
         thread_id = context_data.get("thread_id", "main")
         
@@ -95,10 +95,10 @@ class NodeContextPanel(QGroupBox):
         messages_after = context_data.get("thread_messages_after", [])
         
         context_html = f"""
-        <b>Node:</b> {node_name} (ID: {node_id})<br>
-        <b>Thread ID:</b> {thread_id}<br>
-        <b>Status:</b> <span style="color: #4CAF50;">✓ Executed</span><br><br>
-        <b>Messages Before Execution:</b>
+        <b>节点:</b> {node_name} (ID: {node_id})<br>
+        <b>线程 ID:</b> {thread_id}<br>
+        <b>状态:</b> <span style="color: #4CAF50;">✓ 已执行</span><br><br>
+        <b>执行前消息:</b>
         <div style="background-color: #2d2d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
         """
         
@@ -109,7 +109,7 @@ class NodeContextPanel(QGroupBox):
                 role_color = "#4CAF50" if role == "assistant" else "#2196F3"
                 context_html += f'<span style="color: {role_color};">[{role}]</span> {content}<br>'
         else:
-            context_html += "<i>No messages</i>"
+            context_html += "<i>无消息</i>"
         
         context_html += "</div>"
         self.context_browser.setHtml(context_html)
@@ -118,7 +118,7 @@ class NodeContextPanel(QGroupBox):
         llm_input = context_data.get("llm_input", "")
         prompt_html = f"""
         <div style="background-color: #2d2d2d; padding: 8px; border-radius: 4px; white-space: pre-wrap;">
-        {llm_input if llm_input else '<i>No LLM input</i>'}
+        {llm_input if llm_input else '<i>无 LLM 输入</i>'}
         </div>
         """
         self.prompt_browser.setHtml(prompt_html)
@@ -129,14 +129,14 @@ class NodeContextPanel(QGroupBox):
         data_out = context_data.get("data_out_content")
         
         output_html = f"""
-        <b>LLM Output:</b>
+        <b>LLM 输出:</b>
         <div style="background-color: #2d2d2d; padding: 8px; margin: 4px 0; border-radius: 4px; white-space: pre-wrap;">
-        {llm_output if llm_output else '<i>No LLM output</i>'}
+        {llm_output if llm_output else '<i>无 LLM 输出</i>'}
         </div>
         """
         
         if tool_calls:
-            output_html += "<br><b>Tool Calls:</b>"
+            output_html += "<br><b>工具调用:</b>"
             for tc in tool_calls:
                 tool_name = tc.get("name", "unknown")
                 tool_args = tc.get("args", {})
@@ -144,14 +144,14 @@ class NodeContextPanel(QGroupBox):
                 output_html += f"""
                 <div style="background-color: #3d3d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
                 <span style="color: #FFC107;">🔧 {tool_name}</span><br>
-                <b>Args:</b> {tool_args}<br>
-                <b>Result:</b> {str(tool_result)[:100]}...
+                <b>参数:</b> {tool_args}<br>
+                <b>结果:</b> {str(tool_result)[:100]}...
                 </div>
                 """
         
         if data_out:
             output_html += f"""
-            <br><b>Data Output:</b>
+            <br><b>数据输出:</b>
             <div style="background-color: #2d3d2d; padding: 8px; margin: 4px 0; border-radius: 4px;">
             {data_out}
             </div>
