@@ -164,13 +164,15 @@ class AsyncExecutor(Executor):
             if not handler:
                 raise ValueError(f"未知节点类型: {node.node_type}")
             
+            
+
             # 执行节点 (使用 await，兼容父类的异步 handler)
             # 对于 tool-first 节点，工具调用发生在 handler 内部
             content = await handler(node)
-            
-            # 在节点执行后获取 LLM 输入 prompt
-            # 这样可以确保 tool-first 节点的工具调用结果被包含在 prompt 中
+            # LLM 输入 prompt
             llm_input = self._get_prompt(node)
+            # 删除 prompt 中的 当前节点的输出content
+            llm_input = llm_input.replace(content, "")
             
             # 如果节点设置了 data_out，根据 data_out_thread 合并到目标线程
             # (这个逻辑已经包含在父类 handler 里了吗？)
