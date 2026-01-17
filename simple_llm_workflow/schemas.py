@@ -56,6 +56,13 @@ class NodeProperties(NodeDefinition):
             self.y = MAIN_Y_BASELINE - (self.thread_view_index * THREAD_GAP_Y)
         
 
+class PlaceholderDefinition(BaseModel):
+    """占位符定义"""
+    description: str = Field(default="", description="占位符描述，如 '开始日期'")
+    default: str = Field(default="", description="默认值")
+    value: str = Field(default="", description="当前填写的值")
+
+
 class GuiExecutionPlan(ExecutionPlan):
     """
     前端专用执行计划
@@ -74,6 +81,10 @@ class GuiExecutionPlan(ExecutionPlan):
     """
     nodes: list[NodeProperties] = Field(description="包含 UI 布局信息的节点列表")
     threadId_map_viewId: dict[str, int] = Field(default={},description="thread_id 到 thread_view_index 的映射")
+    placeholders: dict[str, PlaceholderDefinition] = Field(
+        default={}, 
+        description="占位符定义，key为占位符名如'{start_date}'"
+    )
     @model_validator(mode='after')
     def _init_nodes(self) -> 'GuiExecutionPlan':
         """

@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QWidget, QHBoxLayout, 
                              QAction, QFileDialog, QSplitter, QLabel, QLineEdit, QComboBox, 
-                             QMessageBox, QPushButton, QInputDialog)
+                             QMessageBox, QPushButton, QInputDialog, QScrollArea)
 from PyQt5.QtCore import Qt
 
 # 本地导入
@@ -9,6 +9,7 @@ from simple_llm_workflow.qt_front.utils import DARK_STYLESHEET
 from simple_llm_workflow.qt_front.context_panel import NodeContextPanel
 from simple_llm_workflow.qt_front.graph import NodeGraphView
 from simple_llm_workflow.qt_front.node_properties import NodePropertyEditor
+from simple_llm_workflow.qt_front.placeholder_panel import PlaceholderPanel
 
 # 应用配置
 from simple_llm_workflow.config import BACKEND_PORT
@@ -98,6 +99,10 @@ class MainWindow(QMainWindow):
         
         left_panel_layout.addLayout(task_layout)
         
+        # 占位符面板
+        self.placeholder_panel = PlaceholderPanel()
+        left_panel_layout.addWidget(self.placeholder_panel)
+        
         # 执行控制面板
         self.execution_panel = ExecutionControlPanel()
         left_panel_layout.addWidget(self.execution_panel)
@@ -106,7 +111,13 @@ class MainWindow(QMainWindow):
         self.context_panel = NodeContextPanel()
         left_panel_layout.addWidget(self.context_panel)
         
-        main_h_splitter.addWidget(left_panel_widget)
+        # Wrap left panel in a ScrollArea
+        left_scroll_area = QScrollArea()
+        left_scroll_area.setWidget(left_panel_widget)
+        left_scroll_area.setWidgetResizable(True)
+        left_scroll_area.setFrameShape(QScrollArea.NoFrame) # Optional: cleaner look
+        
+        main_h_splitter.addWidget(left_scroll_area)
         
         # --- 右侧: 用于图表和属性的垂直分割器 ---
         right_v_splitter = QSplitter(Qt.Vertical)
@@ -153,6 +164,9 @@ class MainWindow(QMainWindow):
         
         # 上下文相关信号
         self.execution_panel.controller.contextLoaded.connect(self._on_context_loaded)
+        
+        # 占位符面板信号
+        self.placeholder_panel.replaceRequested.connect(self._on_replace_placeholders)
         self.execution_panel.controller.contextFailed.connect(self._on_context_failed)
 
         # 初始状态
@@ -305,6 +319,8 @@ class MainWindow(QMainWindow):
         self.task_input.setText(plan.task or "")
         # 更新执行面板的计划
         self._update_execution_plan()
+        # 更新占位符面板
+        self._update_placeholder_panel(plan)
     
     def on_pattern_combo_changed(self, pattern_name: str):
         """当用户从 ComboBox 选择不同 pattern 时"""
@@ -390,7 +406,7 @@ class MainWindow(QMainWindow):
                 
                 # 将数据传递给 graph_view 进行处理
                 patterns = self.graph_view.load_plans_data(plans_data)
-                
+                self._update_placeholder_panel(plans_data[patterns[0]])
                 # 记录当前文件路径
                 self.current_file_path = path
                 
@@ -399,6 +415,65 @@ class MainWindow(QMainWindow):
                 print(f"Error loading plans: {e}")
                 import traceback
                 traceback.print_exc()
+    
+    def _update_placeholder_panel(self, plan):
+        """更新占位符面板显示"""
+        if hasattr(plan, 'placeholders') and plan.placeholders:
+            # 如果 plan 中已有占位符定义，直接加载
+            self.placeholder_panel.load_placeholders(plan.placeholders)
+        else:
+            # 否则尝试自动检测
+            import json
+            json_str = json.dumps(plan.model_dump(), ensure_ascii=False)
+            detected = self.placeholder_panel.auto_detect_from_json(json_str)
+            if detected:
+                self.placeholder_panel.load_placeholders(detected)
+            else:
+                self.placeholder_panel.load_placeholders({})
+    
+    def _on_replace_placeholders(self):
+        """点击替换按钮后重新加载文件并替换占位符"""
+        from llm_linear_executor.os_plan import load_plans_from_templates
+        
+        if not self.current_file_path:
+            QMessageBox.warning(self, "Warning", "请先加载一个 JSON 文件")
+            return
+        
+        # 获取替换映射
+        replacements = self.placeholder_panel.get_replacements()
+        
+        if not replacements:
+            QMessageBox.information(self, "Info", "没有填写任何占位符值")
+            return
+        
+        try:
+            # 重新加载文件，传入 replacements
+            plans_data = load_plans_from_templates(
+                self.current_file_path, 
+                schema=GuiExecutionPlan,
+                replacements=replacements
+            )
+            
+            # 刷新界面
+            patterns = self.graph_view.load_plans_data(plans_data)
+            
+            # 刷新属性编辑器（清空当前节点，等待用户重新选中）
+            self.prop_editor.current_node_data = None
+            self.prop_editor.setEnabled(False)
+            
+            # 清空上下文面板
+            self.context_panel.clear_context()
+            
+            # 更新占位符面板
+            if patterns:
+                self._update_placeholder_panel(plans_data[patterns[0]])
+            
+            print(f"Replaced and reloaded {len(patterns)} patterns with: {replacements}")
+        except Exception as e:
+            print(f"Error replacing placeholders: {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.warning(self, "Error", f"替换失败: {e}")
 
     def save_plan(self):
         """保存 JSON 计划文件"""
