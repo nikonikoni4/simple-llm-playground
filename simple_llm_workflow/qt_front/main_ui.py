@@ -36,13 +36,17 @@ class MainWindow(QMainWindow):
         # 工具栏
         toolbar = self.addToolBar("Main")
         
-        load_action = QAction("Load JSON Plan", self)
+        load_action = QAction("加载", self)
         load_action.triggered.connect(self.load_plans)
         toolbar.addAction(load_action)
         
-        save_action = QAction("Save JSON Plan", self)
+        save_action = QAction("保存", self)
         save_action.triggered.connect(self.save_plan)
         toolbar.addAction(save_action)
+
+        save_as_action = QAction("另存为", self)
+        save_as_action.triggered.connect(self.save_plan_as)
+        toolbar.addAction(save_as_action)
         
         # 主分割器 (水平逻辑)
         main_h_splitter = QSplitter(Qt.Horizontal)
@@ -178,6 +182,11 @@ class MainWindow(QMainWindow):
         
         # 从后端加载可用工具列表
         self.execution_panel.load_tools()
+
+        # 状态栏文件显示
+        self.file_path_label = QLabel("No file loaded")
+        self.file_path_label.setStyleSheet("color: #ccc; margin-right: 10px;")
+        self.statusBar().addPermanentWidget(self.file_path_label)
 
 
     def _update_execution_plan(self):
@@ -394,6 +403,15 @@ class MainWindow(QMainWindow):
                     f"Failed to create pattern '{pattern_name}'. It may already exist."
                 )
 
+    def _update_file_status(self):
+        """更新状态栏显示当前文件路径"""
+        if self.current_file_path:
+            self.file_path_label.setText(f"File: {self.current_file_path}")
+            self.setWindowTitle(f"Simple LLM Workflow - {self.current_file_path}")
+        else:
+            self.file_path_label.setText("No file loaded")
+            self.setWindowTitle("Simple LLM Workflow")
+
     def load_plans(self):
         """加载 JSON 计划文件"""
         from llm_linear_executor.os_plan import load_plans_from_templates
@@ -409,6 +427,7 @@ class MainWindow(QMainWindow):
                 self._update_placeholder_panel(plans_data[patterns[0]])
                 # 记录当前文件路径
                 self.current_file_path = path
+                self._update_file_status()
                 
                 print(f"Loaded {len(patterns)} patterns: {patterns}")
             except Exception as e:
@@ -477,11 +496,20 @@ class MainWindow(QMainWindow):
 
     def save_plan(self):
         """保存 JSON 计划文件"""
+        self._perform_save(force_dialog=False)
+
+    def save_plan_as(self):
+        """另存为 JSON 计划文件"""
+        self._perform_save(force_dialog=True)
+
+    def _perform_save(self, force_dialog=False):
         import json
         
-        # 如果没有加载过文件，则询问保存路径
-        if not self.current_file_path:
-            path, _ = QFileDialog.getSaveFileName(self, "Save Plan JSON", "", "JSON Files (*.json)")
+        # 如果强制对话框 或 没有加载过文件，则询问保存路径
+        if force_dialog or not self.current_file_path:
+            # 使用上次的路径作为起始目录
+            initial_dir = self.current_file_path if self.current_file_path else ""
+            path, _ = QFileDialog.getSaveFileName(self, "Save Plan JSON", initial_dir, "JSON Files (*.json)")
             if not path:
                 return
         else:
@@ -497,6 +525,7 @@ class MainWindow(QMainWindow):
             
             # 更新当前文件路径
             self.current_file_path = path
+            self._update_file_status()
             
             print(f"Saved {len(save_data)} patterns to {path}")
         except Exception as e:
